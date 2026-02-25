@@ -2,163 +2,76 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>AI 반려견 사주 분석</title>
+  <title>반려견 사주풀이 - AI 명리학 분석</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #0f172a;
-      color: white;
-      margin: 0;
-      padding: 0;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: auto;
-      padding: 30px;
-    }
-
-    h1 {
-      text-align: center;
-      margin-bottom: 30px;
-    }
-
-    input, select, button {
-      width: 100%;
-      padding: 12px;
-      margin-bottom: 12px;
-      border-radius: 8px;
-      border: none;
-      font-size: 16px;
-    }
-
-    input, select {
-      background: #1e293b;
-      color: white;
-    }
-
-    button {
-      background: #6366f1;
-      color: white;
-      cursor: pointer;
-      font-weight: bold;
-    }
-
-    button:hover {
-      background: #4f46e5;
-    }
-
-    .result {
-      background: #1e293b;
-      padding: 20px;
-      border-radius: 10px;
-      margin-top: 20px;
-      white-space: pre-wrap;
-      line-height: 1.6;
-    }
-
-    .loading {
-      text-align: center;
-      margin-top: 10px;
-    }
-  </style>
-
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
 </head>
 <body>
 
 <div class="container">
+  <h1>🐾 반려견 사주풀이</h1>
+  <p class="subtitle">우리 아이의 타고난 기운과 성격을 AI 명리학자가 분석해드립니다.</p>
 
-  <h1>AI 반려견 사주 분석</h1>
+  <div class="form-group">
+    <label for="name">이름</label>
+    <input id="name" type="text" placeholder="아이의 이름을 입력하세요">
+  </div>
 
-  <input id="name" placeholder="반려견 이름">
+  <div class="form-group">
+    <label for="birthdate">생년월일</label>
+    <input id="birthdate" type="date">
+  </div>
 
-  <input id="birthdate" type="date">
+  <div class="form-group">
+    <label for="birthtime">출생시간</label>
+    <select id="birthtime">
+      <option value="unknown">모름</option>
+      <option value="00:00">자시 (23시~01시)</option>
+      <option value="02:00">축시 (01시~03시)</option>
+      <option value="04:00">인시 (03시~05시)</option>
+      <option value="06:00">묘시 (05시~07시)</option>
+      <option value="08:00">진시 (07시~09시)</option>
+      <option value="10:00">사시 (09시~11시)</option>
+      <option value="12:00">오시 (11시~13시)</option>
+      <option value="14:00">미시 (13시~15시)</option>
+      <option value="16:00">신시 (15시~17시)</option>
+      <option value="18:00">유시 (17시~19시)</option>
+      <option value="20:00">술시 (19시~21시)</option>
+      <option value="22:00">해시 (21시~23시)</option>
+    </select>
+  </div>
 
-  <select id="birthtime">
-    <option value="unknown">출생시간 모름</option>
-    <option value="00:00">자시 (23~01)</option>
-    <option value="02:00">축시 (01~03)</option>
-    <option value="04:00">인시 (03~05)</option>
-    <option value="06:00">묘시 (05~07)</option>
-    <option value="08:00">진시 (07~09)</option>
-    <option value="10:00">사시 (09~11)</option>
-    <option value="12:00">오시 (11~13)</option>
-    <option value="14:00">미시 (13~15)</option>
-    <option value="16:00">신시 (15~17)</option>
-    <option value="18:00">유시 (17~19)</option>
-    <option value="20:00">술시 (19~21)</option>
-    <option value="22:00">해시 (21~23)</option>
-  </select>
+  <div class="form-group">
+    <label for="breed">견종</label>
+    <input id="breed" type="text" placeholder="예: 골든 리트리버, 믹스견">
+  </div>
 
-  <input id="breed" placeholder="품종 (예: 미니어처 푸들)">
+  <div class="form-group">
+    <label for="gender">성별</label>
+    <select id="gender">
+      <option value="male">남아</option>
+      <option value="female">여아</option>
+    </select>
+  </div>
 
-  <select id="gender">
-    <option value="male">수컷</option>
-    <option value="female">암컷</option>
-  </select>
+  <button id="analyze-btn">사주 분석 시작하기</button>
 
-  <button onclick="generateSaju()">사주 분석하기</button>
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>AI 명리학자가 우주의 기운을 분석 중입니다...</p>
+  </div>
 
-  <div class="loading" id="loading"></div>
+  <div class="result-area" id="result-area">
+    <div class="result-title">✨ 분석 결과</div>
+    <div id="result-content"></div>
+  </div>
 
-  <div class="result" id="result"></div>
-
+  <footer>
+    © 2026 반려견 사주풀이 AI. All rights reserved.
+  </footer>
 </div>
 
-
-<script>
-
-async function generateSaju() {
-
-  const name = document.getElementById("name").value;
-  const birthdate = document.getElementById("birthdate").value;
-  const birthtime = document.getElementById("birthtime").value;
-  const breed = document.getElementById("breed").value;
-  const gender = document.getElementById("gender").value;
-
-  if (!name || !birthdate || !breed) {
-    alert("필수 정보를 입력하세요.");
-    return;
-  }
-
-  document.getElementById("loading").innerText = "AI 분석중...";
-  document.getElementById("result").innerText = "";
-
-  try {
-
-    const response = await fetch("/api/saju", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        name,
-        birthdate,
-        birthtime,
-        breed,
-        gender
-      })
-    });
-
-    const data = await response.json();
-
-    document.getElementById("loading").innerText = "";
-    document.getElementById("result").innerText = data.result;
-
-  } catch (error) {
-
-    document.getElementById("loading").innerText = "";
-    document.getElementById("result").innerText =
-      "오류 발생: " + error.message;
-
-  }
-
-}
-
-</script>
-
-
+<script src="main.js"></script>
 </body>
 </html>
