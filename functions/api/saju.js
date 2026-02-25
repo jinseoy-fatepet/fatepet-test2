@@ -1,23 +1,10 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+export async function onRequestPost(context) {
+  const { request, env } = context;
+  
+  try {
+    const { name, birthdate, birthtime, breed, gender } = await request.json();
 
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.post('/api/saju', async (req, res) => {
-  const { name, birthdate, birthtime, breed, gender } = req.body;
-
-  const prompt = `
+    const prompt = `
 반려견 사주 분석:
 
 이름: ${name}
@@ -36,15 +23,14 @@ app.post('/api/saju', async (req, res) => {
 반려견의 관점에서 따뜻하면서도 전문적인 명리학 스타일로 상세하게 작성하세요.
 `;
 
-  try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4o", // gpt-5 is not yet available, using gpt-4o for best results
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -64,14 +50,15 @@ app.post('/api/saju', async (req, res) => {
     }
 
     const result = json.choices[0].message.content;
-    res.json({ result });
-  } catch (error) {
-    console.error("Error calling OpenAI:", error);
-    res.status(500).json({ error: "사주 분석 중 오류가 발생했습니다. API 키를 확인해주세요." });
-  }
-});
+    
+    return new Response(JSON.stringify({ result }), {
+      headers: { "Content-Type": "application/json" }
+    });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+}
