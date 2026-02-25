@@ -68,7 +68,8 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
 
   } catch (error) {
     console.error(error);
-    alert('분석 중 오류가 발생했습니다. API 키가 제대로 설정되었는지 확인해 주세요.');
+    // 구체적인 에러 메시지를 사용자에게 보여줍니다.
+    alert('분석 중 오류 발생: ' + error.message);
   } finally {
     clearInterval(msgInterval);
     loading.style.display = 'none';
