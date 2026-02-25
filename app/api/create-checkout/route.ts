@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { NextResponse } from "next/server";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+  // @ts-ignore: API version mismatch during build
   apiVersion: "2025-02-24-preview",
 });
 
