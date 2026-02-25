@@ -1,3 +1,10 @@
+const loadingMessages = [
+  "AI 명리학자가 우주의 기운을 분석 중입니다...",
+  "별자리의 흐름과 견종의 특성을 대조하고 있어요...",
+  "우리 아이의 타고난 기운을 읽어내는 중입니다...",
+  "행복한 반려 생활을 위한 조언을 정리하고 있습니다..."
+];
+
 document.getElementById('analyze-btn').addEventListener('click', async () => {
   const name = document.getElementById('name').value;
   const birthdate = document.getElementById('birthdate').value;
@@ -11,14 +18,23 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
   }
 
   const loading = document.getElementById('loading');
+  const loadingText = loading.querySelector('p');
   const resultArea = document.getElementById('result-area');
   const resultContent = document.getElementById('result-content');
   const analyzeBtn = document.getElementById('analyze-btn');
 
+  // 로딩 시작
   loading.style.display = 'block';
   resultArea.style.display = 'none';
   analyzeBtn.disabled = true;
   analyzeBtn.style.opacity = '0.7';
+
+  // 로딩 메시지 순환
+  let msgIdx = 0;
+  const msgInterval = setInterval(() => {
+    msgIdx = (msgIdx + 1) % loadingMessages.length;
+    loadingText.innerText = loadingMessages[msgIdx];
+  }, 2000);
 
   try {
     const response = await fetch('/api/saju', {
@@ -41,15 +57,20 @@ document.getElementById('analyze-btn').addEventListener('click', async () => {
       throw new Error(data.error);
     }
 
+    // 결과 출력 및 포맷팅 (개행 처리)
     resultContent.innerText = data.result;
     resultArea.style.display = 'block';
     
-    // Smooth scroll to result
-    resultArea.scrollIntoView({ behavior: 'smooth' });
+    // 부드럽게 결과창으로 이동
+    setTimeout(() => {
+      resultArea.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
 
   } catch (error) {
-    alert('분석 중 오류가 발생했습니다: ' + error.message);
+    console.error(error);
+    alert('분석 중 오류가 발생했습니다. API 키가 제대로 설정되었는지 확인해 주세요.');
   } finally {
+    clearInterval(msgInterval);
     loading.style.display = 'none';
     analyzeBtn.disabled = false;
     analyzeBtn.style.opacity = '1';
