@@ -653,7 +653,7 @@ export async function POST(req: Request) {
         is_paid: false,
       })
       .select("id")
-      .single<{ id: string }>();
+      .single();
 
     if (insertError || !inserted?.id) {
       throw new Error(insertError?.message || "failed to insert reading");
@@ -669,12 +669,14 @@ export async function POST(req: Request) {
       breed,
     });
 
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from("readings")
       .update({ image_url: imageUrl })
       .eq("id", inserted.id);
 
-    if (updateError) throw new Error(updateError.message);
+    if (error) {
+      console.error(error);
+    }
 
     return NextResponse.json({
       id: inserted.id,
