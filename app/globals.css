@@ -1,17 +1,20 @@
 :root {
-  --bg: #f7f2e8;
-  --card: #fffaf2;
-  --text: #3f2f20;
-  --muted: #836c4e;
-  --line: #e8dbc8;
-  --gold1: #c79d59;
-  --gold2: #e2bf82;
+  --bg: #f3ecdf;
+  --card: #fff8ea;
+  --text: #2f2417;
+  --muted: #786248;
+  --line: #deccb2;
+  --gold1: #8f6836;
+  --gold2: #c09a63;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: radial-gradient(1200px 420px at 100% 0%, rgba(233, 206, 163, 0.35), transparent), var(--bg);
+  background:
+    radial-gradient(900px 340px at 90% -10%, rgba(116, 84, 46, 0.24), transparent),
+    radial-gradient(700px 300px at -10% 0%, rgba(215, 181, 133, 0.25), transparent),
+    var(--bg);
   color: var(--text);
   font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.55;
@@ -46,10 +49,10 @@ body {
 
 .saju-card, .report-card {
   background: var(--card);
-  border: 1px solid var(--line);
+  border: 1px solid #ccb18a;
   border-radius: 22px;
   padding: 18px;
-  box-shadow: 0 10px 24px rgba(89, 66, 38, 0.08);
+  box-shadow: 0 16px 30px rgba(55, 38, 18, 0.16);
 }
 
 .saju-avatar-wrap { display: flex; justify-content: center; margin-bottom: 14px; }
@@ -99,17 +102,53 @@ body {
 }
 
 .report-avatar {
-  width: 82px; height: 82px; border-radius: 50%; object-fit: cover;
-  border: 2px solid #d7bd95; box-shadow: 0 0 0 3px #f8e8cf;
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid #d6bd98;
+  box-shadow: inset 0 0 0 1px #fff8ec;
   flex-shrink: 0;
+}
+
+.report-avatar-wrap {
+  width: 170px;
+  height: 230px;
+  flex-shrink: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  position: relative;
+  background: linear-gradient(135deg, #efe3cf, #d7be9b);
+}
+
+.image-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(35, 25, 15, 0.52);
+  color: #fff5e6;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .report-head h2 { font-size: 1.2rem; margin-bottom: 2px; }
 .report-head p { color: var(--muted); font-size: 0.9rem; }
 
 .preview-panel {
-  border: 1px solid #eadfce;
-  background: #fff;
+  border: 1px solid #d6c2a5;
+  background: #fffcf6;
   border-radius: 14px;
   padding: 14px;
   min-height: 110px;
@@ -122,8 +161,8 @@ body {
   position: relative;
   border-radius: 14px;
   overflow: hidden;
-  border: 1px solid #eadfce;
-  background: #fff;
+  border: 1px solid #d6c2a5;
+  background: #fffdf9;
 }
 
 .blur-lines {
@@ -143,7 +182,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 14px;
-  background: rgba(255, 250, 241, 0.86);
+  background: rgba(252, 244, 231, 0.9);
 }
 
 .lock-icon-wrap {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard, Undo2 } from "lucide-react";
+import { CreditCard, Loader2, Undo2 } from "lucide-react";
 
 type ReadingResponse = {
   id: string;
@@ -16,12 +16,14 @@ export default function ResultPage() {
   const [error, setError] = useState("");
   const [isOpening, setIsOpening] = useState(false);
   const [openError, setOpenError] = useState("");
+  const [imageLoaded, setImageLoaded] = useState(false);
   const [reading, setReading] = useState<ReadingResponse | null>(null);
   const [data, setData] = useState({
     name: "",
     birthdate: "",
     birthtime: "",
     gender: "",
+    breed: "",
     image: "",
   });
 
@@ -34,10 +36,11 @@ export default function ResultPage() {
     const rawBirthtime = localStorage.getItem("dogBirthTime") || "unknown";
     const birthtime = rawBirthtime === "unknown" ? "unknown" : rawBirthtime;
     const gender = localStorage.getItem("dogGender") || "male";
+    const breed = localStorage.getItem("dogBreed") || "";
     const rawImage = localStorage.getItem("dogImage") || "";
     const image = rawImage && rawImage !== "null" && rawImage !== "undefined" ? rawImage : defaultImage;
 
-    setData({ name, birthdate, birthtime, gender, image });
+    setData({ name, birthdate, birthtime, gender, breed, image });
 
     const requestReading = async () => {
       try {
@@ -55,7 +58,7 @@ export default function ResultPage() {
         const res = await fetch("/api/reading", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, birthdate, birthtime, gender }),
+          body: JSON.stringify({ name, birthdate, birthtime, gender, breed }),
         });
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "리딩 생성 실패");
@@ -104,19 +107,29 @@ export default function ResultPage() {
 
       <section className="report-card">
         <div className="report-head">
-          <img
-            src={reading?.image_url || data.image || defaultImage}
-            alt="반려견"
-            className="report-avatar"
-            onError={(e) => {
-              const target = e.currentTarget;
-              if (target.src.endsWith(defaultImage)) return;
-              target.src = defaultImage;
-            }}
-          />
+          <div className="report-avatar-wrap">
+            <img
+              src={reading?.image_url || data.image || defaultImage}
+              alt="반려견"
+              className="report-avatar"
+              onLoad={() => setImageLoaded(true)}
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (target.src.endsWith(defaultImage)) return;
+                target.src = defaultImage;
+                setImageLoaded(true);
+              }}
+            />
+            {(loading || !imageLoaded) ? (
+              <div className="image-loading-overlay">
+                <Loader2 size={22} className="spin" />
+                <span>사주 도판 생성중...</span>
+              </div>
+            ) : null}
+          </div>
           <div>
             <h2>{data.name}</h2>
-            <p>{data.birthdate || "생년월일 미입력"}</p>
+            <p>{data.breed || "견종 미입력"} · {data.birthdate || "생년월일 미입력"}</p>
           </div>
         </div>
 

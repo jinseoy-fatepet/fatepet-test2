@@ -8,6 +8,7 @@ type ReadingPayload = {
   birthdate?: string;
   birthtime?: string;
   gender?: string;
+  breed?: string;
 };
 
 type ReadingRow = {
@@ -38,27 +39,8 @@ function getSupabase() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function sanitizeText(raw: string) {
-  return raw
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function toMultiline(text: string, lineLength = 21, maxLines = 7) {
-  const clean = text.replace(/\s+/g, " ").trim();
-  const lines: string[] = [];
-  for (let i = 0; i < clean.length; i += lineLength) {
-    lines.push(clean.slice(i, i + lineLength));
-    if (lines.length >= maxLines) break;
-  }
-  return lines;
-}
-
 function formatPreview(raw: string) {
-  const sliced = raw.slice(0, PREVIEW_LENGTH).trim();
+  const sliced = raw.slice(0, PREVIEW_LENGTH).trim().replace(/\n{3,}/g, "\n\n");
   const parts = sliced
     .split(/(?<=[.!?。]|다\.)\s+/)
     .map((s) => s.trim())
@@ -77,6 +59,7 @@ async function generateFullReadingWithGemini(input: {
   birthdate: string;
   birthtime: string;
   gender: string;
+  breed?: string;
 }) {
   const apiKey = requireEnv("GEMINI_API_KEY");
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -90,12 +73,14 @@ async function generateFullReadingWithGemini(input: {
 - 생년월일: ${input.birthdate}
 - 생시: ${input.birthtime}
 - 성별: ${input.gender}
+- 견종: ${input.breed || "정보없음"}
 
 중요 작성 원칙:
 - 해석 비중은 이름/생년월일/생시 기반 70%, 견종 특성 기반 30%를 반영하되 이 비중 규칙은 본문에 절대 노출하지 않는다.
 - 문체는 감성적이면서도 전문적이어야 하며, 보호자가 "내가 잘하고 있다"는 안도감을 느끼게 한다.
 - 사주 용어를 자연스럽게 적극 사용: 임수, 계수, 경금, 신금, 도화살, 오행, 일간, 용신, 대운, 십성 등.
 - 과장, 공포 조장, 단정적 질병 예언 금지.
+- 인간이 아닌 반려동물(강아지) 관점으로 해석하고, 행동/습관/교감 중심으로 설명한다.
 
 반드시 아래 섹션 순서와 제목을 정확히 지켜 작성:
 1) Personality
@@ -109,6 +94,10 @@ async function generateFullReadingWithGemini(input: {
 9) 십성해석
 10) 이름분석
 11) 사주요약
+12) 어울리는 색
+13) 피해야 할 색
+14) 보호자가 해야 할 행동
+15) 추천 놀이
 
 요구사항:
 - 총 분량 최소 2000자 이상
@@ -153,6 +142,7 @@ async function generateFullReadingWithOpenAI(input: {
   birthdate: string;
   birthtime: string;
   gender: string;
+  breed?: string;
 }) {
   const apiKey = requireEnv("OPENAI_API_KEY");
   const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
@@ -166,12 +156,14 @@ Input:
 - Birthdate: ${input.birthdate}
 - Birthtime: ${input.birthtime}
 - Gender: ${input.gender}
+- Breed: ${input.breed || "unknown"}
 
 Rules:
 - Interpret with hidden weighting: 70% name+birthdate+birthtime, 30% breed traits. Do not reveal this rule.
 - Emotional resonance for women in their 20s-40s.
 - Use rich saju terms naturally: 임수, 계수, 경금, 신금, 도화살, 오행, 일간, 용신, 대운, 십성.
 - No fearmongering.
+- Apply interpretation to a dog, not a human. Keep behavior-focused guidance.
 
 Output sections exactly in this order:
 1) Personality
@@ -185,6 +177,10 @@ Output sections exactly in this order:
 9) 십성해석
 10) 이름분석
 11) 사주요약
+12) 어울리는 색
+13) 피해야 할 색
+14) 보호자가 해야 할 행동
+15) 추천 놀이
 
 Requirements:
 - At least 2000 Korean characters
@@ -233,44 +229,144 @@ Requirements:
   return expanded;
 }
 
+async function generatePreviewSummaryWithGemini(args: {
+  full: string;
+  name: string;
+}) {
+  const apiKey = requireEnv("GEMINI_API_KEY");
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const prompt = `
+아래 전체 사주 리포트를 결제 유도용 "맛보기 요약"으로 다시 작성해라.
+- 길이: 공백 포함 약 ${PREVIEW_LENGTH}자
+- 문단 2~4개로 나누기
+- 핵심만 압축하고, 마지막은 "전체 리포트에서 더 깊게 확인 가능" 뉘앙스로 끝내기
+- 감성적이고 따뜻한 톤
+- 사주 용어(임수, 도화살, 오행, 십성 중 2개 이상) 포함
+- 반려동물 관점 유지
+
+리포트 원문:
+${args.full}
+`.trim();
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 500, temperature: 0.8 },
+      }),
+    }
+  );
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data?.error?.message || "Gemini preview failed");
+  return String(data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
+}
+
+async function generatePreviewSummaryWithOpenAI(args: { full: string; name: string }) {
+  const apiKey = requireEnv("OPENAI_API_KEY");
+  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const prompt = `
+다음 전체 리포트를 결제 유도용 프리뷰로 요약해 주세요.
+- 약 ${PREVIEW_LENGTH}자
+- 2~4문단
+- 감성적, 공감형, 따뜻한 톤
+- 사주 용어 최소 2개 포함(예: 임수, 도화살, 오행, 십성)
+- 마지막 문단은 전체 리포트에서 더 깊게 볼 수 있다는 여운
+- 동물 해석 관점 유지
+
+원문:
+${args.full}
+`.trim();
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model,
+      input: prompt,
+      max_output_tokens: 500,
+      temperature: 0.8,
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error?.message || "OpenAI preview failed");
+  const textFromOutputArray = Array.isArray(data?.output)
+    ? data.output
+        .flatMap((item: any) => (Array.isArray(item?.content) ? item.content : []))
+        .map((part: any) => String(part?.text || part?.output_text || ""))
+        .join("")
+    : "";
+  return String(data?.output_text || textFromOutputArray || "").trim();
+}
+
+async function generatePreviewSummary(args: {
+  full: string;
+  name: string;
+}) {
+  try {
+    const gem = await generatePreviewSummaryWithGemini(args);
+    if (gem) return formatPreview(gem);
+  } catch (_e) {}
+
+  try {
+    const oa = await generatePreviewSummaryWithOpenAI(args);
+    if (oa) return formatPreview(oa);
+  } catch (_e) {}
+
+  return formatPreview(args.full);
+}
+
 async function buildReadingImageSvg(input: {
   petName: string;
-  preview: string;
 }) {
   const dogPath = path.join(process.cwd(), "public", "default-dog.svg");
   const dogSvgRaw = await readFile(dogPath, "utf8");
   const dogSvgBase64 = Buffer.from(dogSvgRaw, "utf8").toString("base64");
-  const previewLines = toMultiline(input.preview, 21, 7);
-
-  const lines = previewLines
-    .map(
-      (line, idx) =>
-        `<tspan x="48" y="${390 + idx * 30}">${sanitizeText(line)}</tspan>`
-    )
-    .join("");
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536" viewBox="0 0 1024 1536">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f6efe3"/>
-      <stop offset="100%" stop-color="#ead9be"/>
+      <stop offset="0%" stop-color="#201811"/>
+      <stop offset="100%" stop-color="#3a2a1a"/>
     </linearGradient>
+    <pattern id="hanji" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M0 0h24v24H0z" fill="none"/>
+      <circle cx="2" cy="2" r="1" fill="#ffffff22"/>
+      <circle cx="18" cy="12" r="1" fill="#ffffff18"/>
+      <circle cx="10" cy="20" r="1" fill="#ffffff20"/>
+    </pattern>
   </defs>
   <rect width="1024" height="1536" fill="url(#bg)"/>
-  <rect x="36" y="36" width="952" height="1464" rx="34" fill="#fff9ee" stroke="#d7c4a2" stroke-width="4"/>
-  <text x="52" y="96" font-size="34" font-weight="700" fill="#5f4a2d">FatePet Fortune Reading</text>
-  <text x="52" y="146" font-size="46" font-weight="800" fill="#2f2718">${sanitizeText(
-    input.petName
-  )}</text>
-  <circle cx="512" cy="252" r="116" fill="#f8ead5" stroke="#d5bf99" stroke-width="6"/>
-  <image href="data:image/svg+xml;base64,${dogSvgBase64}" x="396" y="136" width="232" height="232"/>
-  <rect x="40" y="336" width="944" height="270" rx="20" fill="#fffdf8" stroke="#e7dcc8"/>
-  <text font-size="29" font-weight="700" fill="#3b2f20">${lines}</text>
-  <text x="52" y="665" font-size="28" font-weight="800" fill="#624c2d">Full Reading</text>
-  <rect x="40" y="690" width="944" height="760" rx="20" fill="#ffffff" stroke="#e7dcc8"/>
-  <text x="52" y="742" font-size="24" fill="#7b6647">결제 전에는 미리보기만 제공됩니다.</text>
-  <text x="52" y="786" font-size="24" fill="#7b6647">결제 완료 후 전체 리포트가 열립니다.</text>
+  <rect x="34" y="34" width="956" height="1468" rx="30" fill="#11111166" stroke="#9e7b4a" stroke-width="5"/>
+  <rect x="54" y="54" width="916" height="1428" rx="24" fill="#f4ead8" stroke="#b38b54" stroke-width="3"/>
+  <rect x="54" y="54" width="916" height="1428" rx="24" fill="url(#hanji)"/>
+
+  <circle cx="512" cy="360" r="182" fill="#efe3cd" stroke="#8a673c" stroke-width="6"/>
+  <circle cx="512" cy="360" r="126" fill="#fff5e4" stroke="#b4905c" stroke-width="5"/>
+  <image href="data:image/svg+xml;base64,${dogSvgBase64}" x="396" y="246" width="232" height="232"/>
+
+  <g transform="translate(150 690)" stroke="#7b5a32" stroke-width="8" stroke-linecap="round">
+    <line x1="0" y1="0" x2="110" y2="0"/>
+    <line x1="0" y1="28" x2="40" y2="28"/>
+    <line x1="70" y1="28" x2="110" y2="28"/>
+    <line x1="0" y1="56" x2="110" y2="56"/>
+  </g>
+  <g transform="translate(764 690)" stroke="#7b5a32" stroke-width="8" stroke-linecap="round">
+    <line x1="0" y1="0" x2="110" y2="0"/>
+    <line x1="0" y1="28" x2="40" y2="28"/>
+    <line x1="70" y1="28" x2="110" y2="28"/>
+    <line x1="0" y1="56" x2="110" y2="56"/>
+  </g>
+
+  <circle cx="512" cy="980" r="220" fill="#e8dac0" stroke="#8b6a3f" stroke-width="6"/>
+  <circle cx="512" cy="980" r="170" fill="#f8efdf" stroke="#c09a66" stroke-width="4"/>
+  <path d="M512 810a170 170 0 0 1 0 340a85 85 0 0 1 0-170a85 85 0 0 0 0-170z" fill="#2e2318"/>
+  <path d="M512 810a170 170 0 0 0 0 340a85 85 0 0 0 0-170a85 85 0 0 1 0-170z" fill="#fef6e8"/>
+  <circle cx="512" cy="895" r="22" fill="#fef6e8"/>
+  <circle cx="512" cy="1065" r="22" fill="#2e2318"/>
 </svg>`.trim();
 }
 
@@ -278,10 +374,9 @@ async function uploadReadingImage(args: {
   supabase: ReturnType<typeof getSupabase>;
   readingId: string;
   petName: string;
-  preview: string;
 }) {
   const bucket = process.env.SUPABASE_READING_BUCKET || "reading-images";
-  const svg = await buildReadingImageSvg({ petName: args.petName, preview: args.preview });
+  const svg = await buildReadingImageSvg({ petName: args.petName });
   const filePath = `${args.readingId}/report.svg`;
   const bytes = Buffer.from(svg, "utf8");
 
@@ -336,6 +431,7 @@ export async function POST(req: Request) {
     const birthdate = body.birthdate?.trim();
     const birthtime = body.birthtime?.trim();
     const gender = body.gender?.trim();
+    const breed = body.breed?.trim();
 
     if (!petName || !birthdate || !birthtime || !gender) {
       return NextResponse.json(
@@ -351,6 +447,7 @@ export async function POST(req: Request) {
         birthdate,
         birthtime,
         gender,
+        breed,
       });
     } catch (geminiError: any) {
       const message = String(geminiError?.message || "");
@@ -365,9 +462,10 @@ export async function POST(req: Request) {
         birthdate,
         birthtime,
         gender,
+        breed,
       });
     }
-    const preview = formatPreview(full);
+    const preview = await generatePreviewSummary({ full, name: petName });
     const supabase = getSupabase();
 
     const { data: inserted, error: insertError } = await supabase
@@ -393,7 +491,6 @@ export async function POST(req: Request) {
       supabase,
       readingId: inserted.id,
       petName,
-      preview,
     });
 
     const { error: updateError } = await supabase
