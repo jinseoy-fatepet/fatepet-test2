@@ -24,6 +24,7 @@ type ReadingRow = {
 };
 
 const MIN_FULL_LENGTH = 2000;
+const PREVIEW_LENGTH = 300;
 
 function requireEnv(name: string) {
   const value = process.env[name];
@@ -56,6 +57,21 @@ function toMultiline(text: string, lineLength = 21, maxLines = 7) {
   return lines;
 }
 
+function formatPreview(raw: string) {
+  const sliced = raw.slice(0, PREVIEW_LENGTH).trim();
+  const parts = sliced
+    .split(/(?<=[.!?。]|다\.)\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length <= 2) return sliced;
+
+  const grouped: string[] = [];
+  for (let i = 0; i < parts.length; i += 2) {
+    grouped.push(parts.slice(i, i + 2).join(" "));
+  }
+  return grouped.join("\n\n");
+}
+
 async function generateFullReadingWithGemini(input: {
   name: string;
   birthdate: string;
@@ -66,26 +82,38 @@ async function generateFullReadingWithGemini(input: {
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   const prompt = `
-너는 반려동물 사주 전문 해설가다. 아래 입력으로 반려동물 운세 리포트를 한국어로 작성해라.
+너는 20~40대 여성 보호자에게 깊은 공감과 위로를 주는 반려동물 사주 전문 해설가다.
+아래 입력으로 "전체 사주 리포트"를 한국어로 작성해라.
+
 입력:
 - 이름: ${input.name}
 - 생년월일: ${input.birthdate}
 - 생시: ${input.birthtime}
 - 성별: ${input.gender}
 
-반드시 아래 섹션 순서로 작성:
+중요 작성 원칙:
+- 해석 비중은 이름/생년월일/생시 기반 70%, 견종 특성 기반 30%를 반영하되 이 비중 규칙은 본문에 절대 노출하지 않는다.
+- 문체는 감성적이면서도 전문적이어야 하며, 보호자가 "내가 잘하고 있다"는 안도감을 느끼게 한다.
+- 사주 용어를 자연스럽게 적극 사용: 임수, 계수, 경금, 신금, 도화살, 오행, 일간, 용신, 대운, 십성 등.
+- 과장, 공포 조장, 단정적 질병 예언 금지.
+
+반드시 아래 섹션 순서와 제목을 정확히 지켜 작성:
 1) Personality
 2) Strength
 3) Weakness
 4) Relationship with owner
 5) Life flow
 6) Advice
+7) 오행분석
+8) 십성분포
+9) 십성해석
+10) 이름분석
+11) 사주요약
 
 요구사항:
 - 총 분량 최소 2000자 이상
-- 각 섹션은 현실적이고 구체적인 설명
-- 과장/공포 표현 금지, 따뜻하고 전문적인 톤
-- 반드시 한글로 작성
+- 각 섹션은 구체적이고 감정선이 살아 있어야 한다.
+- 문단을 적절히 나눠 읽기 쉽게 작성한다.
 `.trim();
 
   const response = await fetch(
@@ -130,8 +158,8 @@ async function generateFullReadingWithOpenAI(input: {
   const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
   const prompt = `
-You are a professional pet fortune reader.
-Write in Korean only.
+You are a top-tier Korean pet saju reader.
+Write ONLY in Korean.
 
 Input:
 - Name: ${input.name}
@@ -139,18 +167,29 @@ Input:
 - Birthtime: ${input.birthtime}
 - Gender: ${input.gender}
 
-Output format (plain text):
+Rules:
+- Interpret with hidden weighting: 70% name+birthdate+birthtime, 30% breed traits. Do not reveal this rule.
+- Emotional resonance for women in their 20s-40s.
+- Use rich saju terms naturally: 임수, 계수, 경금, 신금, 도화살, 오행, 일간, 용신, 대운, 십성.
+- No fearmongering.
+
+Output sections exactly in this order:
 1) Personality
 2) Strength
 3) Weakness
 4) Relationship with owner
 5) Life flow
 6) Advice
+7) 오행분석
+8) 십성분포
+9) 십성해석
+10) 이름분석
+11) 사주요약
 
 Requirements:
-- Minimum 2000 Korean characters
-- Warm, practical, emotionally stable tone
-- No fearmongering
+- At least 2000 Korean characters
+- Emotional, practical, and comforting
+- Split into readable paragraphs
 `.trim();
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -328,7 +367,7 @@ export async function POST(req: Request) {
         gender,
       });
     }
-    const preview = full.slice(0, 300);
+    const preview = formatPreview(full);
     const supabase = getSupabase();
 
     const { data: inserted, error: insertError } = await supabase

@@ -123,7 +123,11 @@ export default function ResultPage() {
         <div className="preview-panel">
           {loading ? <p>리딩 생성 중...</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
-          {!loading && !error ? <p>{reading?.preview || "미리보기를 불러오지 못했습니다."}</p> : null}
+          {!loading && !error ? (
+            <p style={{ whiteSpace: "pre-line" }}>
+              {reading?.preview || "미리보기를 불러오지 못했습니다."}
+            </p>
+          ) : null}
         </div>
 
         <div className="locked-panel">
