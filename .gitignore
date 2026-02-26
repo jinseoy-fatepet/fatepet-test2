@@ -11,3 +11,4 @@ fatepet-test2/
 .dev.vars*
 !.dev.vars.example
 !.env.example
+.vercel
