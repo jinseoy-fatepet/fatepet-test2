@@ -54,6 +54,18 @@ function formatPreview(raw: string) {
   return grouped.join("\n\n");
 }
 
+function ensurePreviewTeaser(preview: string, full: string) {
+  let out = formatPreview(preview || "");
+  if (out.length >= 240) return out;
+
+  const fallback = formatPreview(full);
+  if (fallback.length >= 240) return fallback;
+
+  let extended = `${out}\n\n${fallback}`.trim();
+  if (extended.length > PREVIEW_LENGTH) extended = extended.slice(0, PREVIEW_LENGTH);
+  return extended;
+}
+
 async function generateFullReadingWithGemini(input: {
   name: string;
   birthdate: string;
@@ -307,15 +319,15 @@ async function generatePreviewSummary(args: {
 }) {
   try {
     const gem = await generatePreviewSummaryWithGemini(args);
-    if (gem) return formatPreview(gem);
+    if (gem) return ensurePreviewTeaser(gem, args.full);
   } catch (_e) {}
 
   try {
     const oa = await generatePreviewSummaryWithOpenAI(args);
-    if (oa) return formatPreview(oa);
+    if (oa) return ensurePreviewTeaser(oa, args.full);
   } catch (_e) {}
 
-  return formatPreview(args.full);
+  return ensurePreviewTeaser(args.full, args.full);
 }
 
 async function buildReadingImageSvg(input: {
