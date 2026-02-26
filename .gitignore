@@ -3,6 +3,8 @@ firebase-debug.log
 .vscode/
 node_modules/
 .env
+.next/
+fatepet-test2/
 
 # wrangler files
 .wrangler

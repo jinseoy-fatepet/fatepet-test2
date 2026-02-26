@@ -1,10 +1,16 @@
 import './globals.css';
 import type { Metadata } from 'next';
+import type { Viewport } from 'next';
 
 export const metadata: Metadata = {
   title: '반려견 사주 분석 - AI 명리학',
   description: '우리 아이의 타고난 운명을 AI 명리학자가 분석해드립니다.',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({

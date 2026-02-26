@@ -5,77 +5,109 @@ import { useRouter } from "next/navigation";
 import { PawPrint } from "lucide-react";
 
 export default function Home() {
+  const router = useRouter();
+  const defaultImage = "/default-dog.svg";
+
   const [name, setName] = useState("");
   const [birth, setBirth] = useState("");
+  const [birthTime, setBirthTime] = useState("unknown");
   const [breed, setBreed] = useState("");
   const [gender, setGender] = useState("male");
-  const [image, setImage] = useState("https://images.unsplash.com/photo-1543466835-00a732f3b9a1?q=80&w=300&auto=format&fit=crop");
+  const [image, setImage] = useState(defaultImage);
 
-  const router = useRouter();
+  const onPickImage = (file?: File | null) => {
+    if (!file) {
+      setImage(defaultImage);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") setImage(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !birth || !breed) {
-      alert("모든 정보를 입력해주세요!");
+      alert("이름, 생년월일, 견종을 입력해주세요.");
       return;
     }
 
     localStorage.setItem("dogName", name);
     localStorage.setItem("dogBirth", birth);
+    localStorage.setItem("dogBirthTime", birthTime);
     localStorage.setItem("dogBreed", breed);
     localStorage.setItem("dogGender", gender);
-    localStorage.setItem("dogImage", image);
+    localStorage.setItem("dogImage", image || defaultImage);
 
     router.push("/result");
   };
 
   return (
-    <main className="container">
-      <h1>🐶 반려견 사주 분석</h1>
+    <main className="saju-container">
+      <section className="saju-hero">
+        <p className="saju-badge">SajuAI</p>
+        <h1>사주아이 반려견 사주</h1>
+        <p>우리 아이의 기질과 교감 흐름을 감성적으로 읽어드려요.</p>
+      </section>
 
-      <div className="card">
-        <div className="dog-image-container">
-          <img src={image} alt="반려견 기본 이미지" />
+      <section className="saju-card">
+        <div className="saju-avatar-wrap">
+          <img
+            src={image || defaultImage}
+            alt="반려견 프로필"
+            className="saju-avatar"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (target.src.endsWith(defaultImage)) return;
+              target.src = defaultImage;
+              setImage(defaultImage);
+            }}
+          />
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: '#94a3b8' }}>반려견 이름</label>
-          <input
-            placeholder="예: 초코, 보리"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+        <form onSubmit={handleSubmit} className="saju-form">
+          <label>사진 업로드(선택)</label>
+          <input type="file" accept="image/*" onChange={(e) => onPickImage(e.target.files?.[0])} />
 
-          <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: '#94a3b8' }}>생년월일</label>
-          <input
-            type="date"
-            value={birth}
-            onChange={(e) => setBirth(e.target.value)}
-          />
+          <label>반려견 이름</label>
+          <input placeholder="예: 후추" value={name} onChange={(e) => setName(e.target.value)} />
 
-          <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: '#94a3b8' }}>견종</label>
-          <input
-            placeholder="예: 푸들, 말티즈"
-            value={breed}
-            onChange={(e) => setBreed(e.target.value)}
-          />
+          <label>생년월일</label>
+          <input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
 
-          <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: '#94a3b8' }}>성별</label>
+          <label>태어난 시간</label>
+          <select value={birthTime} onChange={(e) => setBirthTime(e.target.value)}>
+            <option value="unknown">모름</option>
+            <option value="00:00">자시 (23~01)</option>
+            <option value="02:00">축시 (01~03)</option>
+            <option value="04:00">인시 (03~05)</option>
+            <option value="06:00">묘시 (05~07)</option>
+            <option value="08:00">진시 (07~09)</option>
+            <option value="10:00">사시 (09~11)</option>
+            <option value="12:00">오시 (11~13)</option>
+            <option value="14:00">미시 (13~15)</option>
+            <option value="16:00">신시 (15~17)</option>
+            <option value="18:00">유시 (17~19)</option>
+            <option value="20:00">술시 (19~21)</option>
+            <option value="22:00">해시 (21~23)</option>
+          </select>
+
+          <label>견종</label>
+          <input placeholder="예: 푸들" value={breed} onChange={(e) => setBreed(e.target.value)} />
+
+          <label>성별</label>
           <select value={gender} onChange={(e) => setGender(e.target.value)}>
             <option value="male">남아</option>
             <option value="female">여아</option>
           </select>
 
-          <button type="submit" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-            <PawPrint size={20} />
-            아이 사주 확인하기
+          <button type="submit" className="saju-primary-btn">
+            <PawPrint size={18} /> 사주 분석 시작하기
           </button>
         </form>
-      </div>
-
-      <p style={{ textAlign: 'center', marginTop: '30px', color: '#64748b', fontSize: '0.85rem' }}>
-        이미지는 기본 이미지로 설정되며, 결과 페이지에서 <br/>다양한 캐릭터로 변경할 수 있습니다.
-      </p>
+      </section>
     </main>
   );
 }
