@@ -133,6 +133,14 @@ export default function ResultPage() {
           </div>
         </div>
 
+        <div className="info-chips">
+          <span className="chip">이름 {data.name || "-"}</span>
+          <span className="chip">생년월일 {data.birthdate || "-"}</span>
+          <span className="chip">생시 {data.birthtime === "unknown" ? "모름" : (data.birthtime || "-")}</span>
+          <span className="chip">성별 {data.gender === "female" ? "여아" : "남아"}</span>
+          <span className="chip">견종 {data.breed || "-"}</span>
+        </div>
+
         <div className="preview-panel">
           {loading ? <p>리딩 생성 중...</p> : null}
           {error ? <p className="error-text">{error}</p> : null}

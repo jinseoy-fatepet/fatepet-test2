@@ -320,17 +320,29 @@ async function generatePreviewSummary(args: {
 
 async function buildReadingImageSvg(input: {
   petName: string;
+  birthdate?: string;
+  birthtime?: string;
+  gender?: string;
+  breed?: string;
 }) {
   const dogPath = path.join(process.cwd(), "public", "default-dog.svg");
   const dogSvgRaw = await readFile(dogPath, "utf8");
   const dogSvgBase64 = Buffer.from(dogSvgRaw, "utf8").toString("base64");
+  const seed = `${input.petName}|${input.birthdate || ""}|${input.birthtime || ""}|${input.gender || ""}|${input.breed || ""}`;
+  const tone = seed.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 3;
+  const palettes = [
+    ["#ece0cb", "#cab086", "#7f5f35"],
+    ["#e7ddce", "#bfa785", "#6b5236"],
+    ["#efe5d2", "#c3ab80", "#7d6646"],
+  ] as const;
+  const [paper, line, accent] = palettes[tone];
 
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536" viewBox="0 0 1024 1536">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#201811"/>
-      <stop offset="100%" stop-color="#3a2a1a"/>
+      <stop offset="0%" stop-color="#241a12"/>
+      <stop offset="100%" stop-color="#3f2c18"/>
     </linearGradient>
     <pattern id="hanji" width="24" height="24" patternUnits="userSpaceOnUse">
       <path d="M0 0h24v24H0z" fill="none"/>
@@ -338,35 +350,77 @@ async function buildReadingImageSvg(input: {
       <circle cx="18" cy="12" r="1" fill="#ffffff18"/>
       <circle cx="10" cy="20" r="1" fill="#ffffff20"/>
     </pattern>
+    <radialGradient id="shine" cx="0.5" cy="0.5" r="0.6">
+      <stop offset="0%" stop-color="#fff9ef" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#f0dabb" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="1024" height="1536" fill="url(#bg)"/>
-  <rect x="34" y="34" width="956" height="1468" rx="30" fill="#11111166" stroke="#9e7b4a" stroke-width="5"/>
-  <rect x="54" y="54" width="916" height="1428" rx="24" fill="#f4ead8" stroke="#b38b54" stroke-width="3"/>
+  <rect x="34" y="34" width="956" height="1468" rx="30" fill="#11111166" stroke="${line}" stroke-width="5"/>
+  <rect x="54" y="54" width="916" height="1428" rx="24" fill="${paper}" stroke="${line}" stroke-width="3"/>
   <rect x="54" y="54" width="916" height="1428" rx="24" fill="url(#hanji)"/>
 
-  <circle cx="512" cy="360" r="182" fill="#efe3cd" stroke="#8a673c" stroke-width="6"/>
-  <circle cx="512" cy="360" r="126" fill="#fff5e4" stroke="#b4905c" stroke-width="5"/>
+  <rect x="88" y="104" width="536" height="520" rx="22" fill="#f9f2e4" stroke="${line}" stroke-width="3"/>
+  <rect x="114" y="142" width="486" height="130" rx="16" fill="#fffaf1" stroke="${line}" stroke-width="2"/>
+  <rect x="114" y="292" width="486" height="304" rx="16" fill="#fffdf8" stroke="${line}" stroke-width="2"/>
+  <line x1="114" y1="392" x2="600" y2="392" stroke="#b5966d" stroke-width="1.5"/>
+  <line x1="114" y1="492" x2="600" y2="492" stroke="#b5966d" stroke-width="1.5"/>
+  <line x1="236" y1="292" x2="236" y2="596" stroke="#b5966d" stroke-width="1.5"/>
+  <line x1="358" y1="292" x2="358" y2="596" stroke="#b5966d" stroke-width="1.5"/>
+  <line x1="480" y1="292" x2="480" y2="596" stroke="#b5966d" stroke-width="1.5"/>
+
+  <circle cx="760" cy="320" r="194" fill="#efe3cd" stroke="${accent}" stroke-width="6"/>
+  <circle cx="760" cy="320" r="136" fill="#fff5e4" stroke="${line}" stroke-width="5"/>
   <image href="data:image/svg+xml;base64,${dogSvgBase64}" x="396" y="246" width="232" height="232"/>
+  <image href="data:image/svg+xml;base64,${dogSvgBase64}" x="624" y="184" width="272" height="272"/>
+  <circle cx="760" cy="320" r="184" fill="url(#shine)"/>
 
-  <g transform="translate(150 690)" stroke="#7b5a32" stroke-width="8" stroke-linecap="round">
+  <g transform="translate(654 548)">
+    <rect x="0" y="0" width="212" height="84" rx="14" fill="#fdf8ef" stroke="${line}" stroke-width="2"/>
+    <circle cx="34" cy="42" r="14" fill="#79a9d8"/>
+    <circle cx="74" cy="42" r="14" fill="#89b07a"/>
+    <circle cx="114" cy="42" r="14" fill="#e09d54"/>
+    <circle cx="154" cy="42" r="14" fill="#a98f72"/>
+    <circle cx="194" cy="42" r="10" fill="#c25e5e"/>
+  </g>
+
+  <g transform="translate(88 668)" stroke="${accent}" stroke-width="8" stroke-linecap="round">
     <line x1="0" y1="0" x2="110" y2="0"/>
     <line x1="0" y1="28" x2="40" y2="28"/>
     <line x1="70" y1="28" x2="110" y2="28"/>
     <line x1="0" y1="56" x2="110" y2="56"/>
   </g>
-  <g transform="translate(764 690)" stroke="#7b5a32" stroke-width="8" stroke-linecap="round">
+  <g transform="translate(826 668)" stroke="${accent}" stroke-width="8" stroke-linecap="round">
     <line x1="0" y1="0" x2="110" y2="0"/>
     <line x1="0" y1="28" x2="40" y2="28"/>
     <line x1="70" y1="28" x2="110" y2="28"/>
     <line x1="0" y1="56" x2="110" y2="56"/>
   </g>
 
-  <circle cx="512" cy="980" r="220" fill="#e8dac0" stroke="#8b6a3f" stroke-width="6"/>
-  <circle cx="512" cy="980" r="170" fill="#f8efdf" stroke="#c09a66" stroke-width="4"/>
-  <path d="M512 810a170 170 0 0 1 0 340a85 85 0 0 1 0-170a85 85 0 0 0 0-170z" fill="#2e2318"/>
-  <path d="M512 810a170 170 0 0 0 0 340a85 85 0 0 0 0-170a85 85 0 0 1 0-170z" fill="#fef6e8"/>
-  <circle cx="512" cy="895" r="22" fill="#fef6e8"/>
-  <circle cx="512" cy="1065" r="22" fill="#2e2318"/>
+  <rect x="88" y="760" width="848" height="668" rx="24" fill="#fff7eb" stroke="${line}" stroke-width="3"/>
+  <rect x="118" y="806" width="788" height="182" rx="18" fill="#fffdf8" stroke="${line}" stroke-width="2"/>
+  <rect x="118" y="1014" width="788" height="182" rx="18" fill="#fffdf8" stroke="${line}" stroke-width="2"/>
+  <rect x="118" y="1222" width="788" height="162" rx="18" fill="#fffdf8" stroke="${line}" stroke-width="2"/>
+
+  <g transform="translate(146 848)">
+    <circle cx="0" cy="0" r="12" fill="#7aa5cc"/>
+    <circle cx="52" cy="0" r="12" fill="#86b07b"/>
+    <circle cx="104" cy="0" r="12" fill="#d68f52"/>
+    <circle cx="156" cy="0" r="12" fill="#b49776"/>
+    <circle cx="208" cy="0" r="12" fill="#b25454"/>
+  </g>
+  <g transform="translate(146 1060)">
+    <path d="M0 0l14 24h-28z" fill="#8d764f"/>
+    <path d="M56 0l14 24h-28z" fill="#3b8fc0"/>
+    <path d="M112 0l14 24h-28z" fill="#7ea76d"/>
+    <path d="M168 0l14 24h-28z" fill="#c86d48"/>
+    <path d="M224 0l14 24h-28z" fill="#7a60a8"/>
+  </g>
+  <g transform="translate(146 1270)" stroke="${accent}" stroke-width="5" stroke-linecap="round">
+    <line x1="0" y1="0" x2="220" y2="0"/>
+    <line x1="0" y1="26" x2="180" y2="26"/>
+    <line x1="0" y1="52" x2="200" y2="52"/>
+  </g>
 </svg>`.trim();
 }
 
@@ -374,9 +428,19 @@ async function uploadReadingImage(args: {
   supabase: ReturnType<typeof getSupabase>;
   readingId: string;
   petName: string;
+  birthdate?: string;
+  birthtime?: string;
+  gender?: string;
+  breed?: string;
 }) {
   const bucket = process.env.SUPABASE_READING_BUCKET || "reading-images";
-  const svg = await buildReadingImageSvg({ petName: args.petName });
+  const svg = await buildReadingImageSvg({
+    petName: args.petName,
+    birthdate: args.birthdate,
+    birthtime: args.birthtime,
+    gender: args.gender,
+    breed: args.breed,
+  });
   const filePath = `${args.readingId}/report.svg`;
   const bytes = Buffer.from(svg, "utf8");
 
@@ -491,6 +555,10 @@ export async function POST(req: Request) {
       supabase,
       readingId: inserted.id,
       petName,
+      birthdate,
+      birthtime,
+      gender,
+      breed,
     });
 
     const { error: updateError } = await supabase

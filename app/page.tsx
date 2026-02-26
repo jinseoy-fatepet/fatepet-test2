@@ -75,7 +75,7 @@ export default function Home() {
           <input placeholder="예: 후추" value={name} onChange={(e) => setName(e.target.value)} />
 
           <label>생년월일</label>
-          <input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
+          <input className="luxury-date-input" type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
 
           <label>태어난 시간</label>
           <select value={birthTime} onChange={(e) => setBirthTime(e.target.value)}>
