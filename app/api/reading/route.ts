@@ -452,11 +452,8 @@ async function generateReadingContent(input: GenerationInput): Promise<Generatio
 
   const parsed = extractJsonObject(raw) as Partial<GenerationOutput> | null;
   const full_text = normalizeFull(String(parsed?.full_text || raw || ""));
-  let preview_text = normalizePreview(String(parsed?.preview_text || ""), input);
-  const previewProbe = preview_text.slice(0, 120).trim();
-  if (previewProbe && full_text.includes(previewProbe)) {
-    preview_text = normalizePreview("", input);
-  }
+  const previewSource = String(parsed?.preview_text || "").trim() || buildPreviewFallback(input);
+  const preview_text = normalizePreview(previewSource, input);
   const image_prompt = buildImagePrompt(input);
 
   return { preview_text, full_text, image_prompt };
