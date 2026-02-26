@@ -120,6 +120,69 @@ async function generateFullReadingWithGemini(input: {
   return expanded;
 }
 
+async function generateFullReadingWithOpenAI(input: {
+  name: string;
+  birthdate: string;
+  birthtime: string;
+  gender: string;
+}) {
+  const apiKey = requireEnv("OPENAI_API_KEY");
+  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+
+  const prompt = `
+You are a professional pet fortune reader.
+Write in Korean only.
+
+Input:
+- Name: ${input.name}
+- Birthdate: ${input.birthdate}
+- Birthtime: ${input.birthtime}
+- Gender: ${input.gender}
+
+Output format (plain text):
+1) Personality
+2) Strength
+3) Weakness
+4) Relationship with owner
+5) Life flow
+6) Advice
+
+Requirements:
+- Minimum 2000 Korean characters
+- Warm, practical, emotionally stable tone
+- No fearmongering
+`.trim();
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      input: prompt,
+      max_output_tokens: 2600,
+      temperature: 0.8,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error?.message || "OpenAI generation failed");
+  }
+
+  const text = (data?.output_text || "").trim();
+  if (!text) throw new Error("OpenAI returned empty text");
+
+  if (text.length >= MIN_FULL_LENGTH) return text;
+  const filler =
+    " 또한 보호자의 생활 리듬과 감정 신호를 일관되게 전달하면 아이의 안정감과 사회성이 함께 성장하며 장기적인 관계 만족도가 높아집니다.";
+  let expanded = text;
+  while (expanded.length < MIN_FULL_LENGTH) expanded += filler;
+  return expanded;
+}
+
 async function buildReadingImageSvg(input: {
   petName: string;
   preview: string;
@@ -231,12 +294,29 @@ export async function POST(req: Request) {
       );
     }
 
-    const full = await generateFullReadingWithGemini({
-      name: petName,
-      birthdate,
-      birthtime,
-      gender,
-    });
+    let full: string;
+    try {
+      full = await generateFullReadingWithGemini({
+        name: petName,
+        birthdate,
+        birthtime,
+        gender,
+      });
+    } catch (geminiError: any) {
+      const message = String(geminiError?.message || "");
+      const quotaLike =
+        message.includes("Quota exceeded") ||
+        message.includes("RESOURCE_EXHAUSTED") ||
+        message.includes("rate-limits");
+      if (!quotaLike && !process.env.OPENAI_API_KEY) throw geminiError;
+
+      full = await generateFullReadingWithOpenAI({
+        name: petName,
+        birthdate,
+        birthtime,
+        gender,
+      });
+    }
     const preview = full.slice(0, 300);
     const supabase = getSupabase();
 
