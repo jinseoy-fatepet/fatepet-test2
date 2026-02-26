@@ -39,16 +39,20 @@ type GenerationOutput = {
   image_prompt: string;
 };
 
-const PREVIEW_MIN = 350;
-const PREVIEW_MAX = 400;
+const PREVIEW_MIN = 500;
+const PREVIEW_MAX = 600;
 const SECTION_MIN = 200;
 const SECTION_MAX = 300;
 const SECTION_TITLES = [
-  "사주 원국 분석",
-  "성격 및 기질",
+  "사주 원국 구조 분석",
+  "일간 중심 성향 분석",
+  "오행 균형 및 에너지 흐름",
+  "성격 및 행동 기질",
+  "지능 및 학습 능력",
   "보호자와의 인연 및 교감",
+  "사회성 및 외부 관계",
   "건강 및 질병 운",
-  "인생 흐름과 전환점",
+  "인생 흐름 및 전환점",
   "종합 결론",
 ] as const;
 
@@ -63,6 +67,7 @@ const REQUIRED_TERMS = [
   "식신",
   "재성",
   "관성",
+  "인성",
   "편관",
   "정관",
   "도화살",
@@ -124,6 +129,21 @@ function ensureContainsHealth(text: string) {
   return `${text} 특히 스트레스와 소화기 리듬을 함께 관리하면 전체 균형이 더 안정됩니다.`;
 }
 
+function buildPreviewFallback(input: GenerationInput) {
+  return `${input.pet_name}의 사주 흐름은 일간의 안정성과 오행의 균형을 중심으로 읽히며, ${input.breed} 기질이 더해져 수(水)와 금(金)의 기운이 관계 감수성을 세밀하게 살립니다. 평소 표현에서는 식신과 인성 구조가 부드럽게 작동해 보호자와의 교감 신호를 빠르게 읽고, 도화살 작용은 낯선 환경에서도 호기심을 잃지 않게 돕습니다. 다만 관성 압력이 강해지는 날에는 긴장 반응이 피부와 소화기 컨디션으로 드러날 수 있어 휴식 리듬이 중요합니다. 전 생애 흐름은 초기 적응기, 성숙기, 안정기로 갈수록 기운 정렬이 또렷해지며 보호자의 일관된 루틴이 아이의 균형을 장기적으로 단단하게 만듭니다.`;
+}
+
+function ensurePreviewCoverage(text: string) {
+  let out = text;
+  if (!out.includes("일간")) out = `${out} 일간의 축이 흔들리지 않아 기본 정서가 안정적입니다.`;
+  if (!out.includes("오행")) out = `${out} 오행의 순환은 환경 적응과 관계 해석의 핵심 기준이 됩니다.`;
+  if (!out.includes("균형")) out = `${out} 생활 리듬의 균형을 지키면 아이의 기운 흐름이 더 부드러워집니다.`;
+  if (!out.includes("보호자")) out = `${out} 보호자와의 상호 반응이 아이의 감정 안정에 직접적 영향을 줍니다.`;
+  if (!out.includes("성격")) out = `${out} 성격의 핵심은 다정함과 관찰력이 공존하는 점입니다.`;
+  if (!out.includes("인생 흐름")) out = `${out} 인생 흐름은 초기 적응기 이후 성숙 구간에서 완성도가 높아집니다.`;
+  return out;
+}
+
 function splitToPreviewParagraphs(text: string) {
   const sentences = text
     .split(/(?<=[.!?]|다\.)\s+/)
@@ -139,16 +159,17 @@ function splitToPreviewParagraphs(text: string) {
   return groups.join("\n\n");
 }
 
-function normalizePreview(input: string, fallbackFromFull: string) {
+function normalizePreview(input: string, context: GenerationInput) {
   let text = collapseSpace(input || "");
-  if (!text) text = collapseSpace(fallbackFromFull || "");
+  if (!text) text = collapseSpace(buildPreviewFallback(context));
 
-  text = ensureContainsMinTerms(text, 3);
+  text = ensurePreviewCoverage(text);
+  text = ensureContainsMinTerms(text, 4);
   text = ensureContainsHealth(text);
 
   if (text.length > PREVIEW_MAX) text = text.slice(0, PREVIEW_MAX).trim();
   while (text.length < PREVIEW_MIN) {
-    text = `${text} 보호자와의 교감이 깊어질수록 아이의 오행 균형이 더 따뜻하게 안정됩니다.`;
+    text = `${text} 보호자와의 교감이 깊어질수록 아이의 오행 균형이 더 따뜻하게 안정되고 인생 흐름도 유연해집니다.`;
     if (text.length > PREVIEW_MAX) {
       text = text.slice(0, PREVIEW_MAX).trim();
       break;
@@ -158,7 +179,7 @@ function normalizePreview(input: string, fallbackFromFull: string) {
   let out = splitToPreviewParagraphs(text);
   if (out.length > PREVIEW_MAX) out = out.slice(0, PREVIEW_MAX).trim();
   if (out.length < PREVIEW_MIN) {
-    out = `${out} 오행의 균형을 지켜주는 생활 루틴이 아이의 정서 안정에 큰 힘이 됩니다.`;
+    out = `${out} 오행의 균형을 지켜주는 생활 루틴이 아이의 정서 안정과 건강 관리의 중심축이 됩니다.`;
     if (out.length > PREVIEW_MAX) out = out.slice(0, PREVIEW_MAX).trim();
   }
   return out;
@@ -181,8 +202,9 @@ function normalizeSectionBody(body: string, opts?: { health?: boolean }) {
 
 function parseSections(fullText: string) {
   const normalized = fullText.replace(/\r/g, "");
+  const titlesPattern = SECTION_TITLES.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
   const blocks = normalized
-    .split(/(?=^\s*(?:\d+[.)]\s*)?(?:사주 원국 분석|성격 및 기질|보호자와의 인연 및 교감|건강 및 질병 운|인생 흐름과 전환점|종합 결론)\s*$)/m)
+    .split(new RegExp(`(?=^\\s*(?:\\d+[.)]\\s*)?(?:${titlesPattern})\\s*$)`, "m"))
     .map((b) => b.trim())
     .filter(Boolean);
 
@@ -219,7 +241,7 @@ function normalizeFull(fullText: string) {
 
   const sections = SECTION_TITLES.map((title, idx) => {
     const source = sectionMap.get(title) || rawChunks[idx] || fullText;
-    const body = normalizeSectionBody(source, { health: idx === 3 });
+    const body = normalizeSectionBody(source, { health: idx === 7 });
     return `${idx + 1}. ${title}\n${body}`;
   });
 
@@ -227,7 +249,7 @@ function normalizeFull(fullText: string) {
 }
 
 function buildImagePrompt(input: GenerationInput) {
-  return `A realistic ${input.breed} dog portrait centered, Korean saju report infographic style, beige parchment background, Korean fortune report design, elegant layout, high detail, premium report look, soft lighting, clean background, square format, subtle Korean fortune report elements, parchment paper texture, premium aesthetic, no text, no Korean letters, no typography, no captions`;
+  return `A realistic ${input.breed} dog with exact breed characteristics visible, centered portrait, full body or upper body visible, looking calm and intelligent, Korean saju fortune report style, premium parchment background, beige Korean traditional paper texture, elegant and minimal layout, clean and professional composition, soft lighting, studio quality, subtle decorative Korean traditional pattern, premium infographic aesthetic, clean background, not distorted, not abstract, not blurry, square format, ultra high quality, sharp details, no text, no letters, no Korean characters, no Chinese characters, no glitch, no broken layout`;
 }
 
 function buildMasterPrompt(input: GenerationInput) {
@@ -241,28 +263,45 @@ function buildMasterPrompt(input: GenerationInput) {
 ------------------------------------------------
 [절대 규칙]
 preview_text, full_text, image_prompt는 서로 독립적으로 생성하십시오.
-preview_text는 full_text를 요약하거나 복사하지 마십시오.
-preview_text는 반드시 새롭게 생성된 요약이어야 합니다.
+preview_text는 full_text의 첫 문장, 일부, 요약, 발췌를 절대 사용하지 마십시오.
+preview_text는 전체 사주를 다시 분석하여 새롭게 생성한 "전체 요약본"입니다.
+preview_text와 full_text는 서로 완전히 다른 문장으로 작성하십시오.
 
 ------------------------------------------------
 [preview_text 생성 규칙]
-- 정확히 350~400자 사이로 작성하십시오
-- 반드시 아래 사주 용어 중 최소 3개 이상 포함:
+목표: 전체 사주에 대한 요약본
+- 500자 이상, 600자 이내
+- 반드시 전체 사주 구조를 요약해야 함
+- full_text의 첫 문단 복사 금지
+- 새로운 문장으로 생성
+
+반드시 포함할 내용:
+- 일간과 오행 균형
+- 성격 핵심
+- 보호자와의 관계
+- 건강 경향
+- 인생 흐름
+
+사주용어 최소 4개 이상 포함:
 일간, 오행, 수(水), 금(金), 목(木), 화(火), 토(土),
-식신, 재성, 관성, 편관, 정관, 도화살, 기운, 균형, 구조
-- 톤: 친근하면서도 전문적인 명리학 해석 스타일
-- 보호자와의 교감 능력, 성격, 핵심 기운 중심으로 작성
-- 질병 또는 건강 관련 내용 1개 이상 포함
+식신, 재성, 관성, 인성, 도화살, 구조, 기운, 균형
+
+톤:
+전문적이고 따뜻한 명리학 리포트 요약
 
 ------------------------------------------------
 [full_text 생성 규칙]
-아래 6개 섹션으로 구성하십시오:
-1. 사주 원국 분석
-2. 성격 및 기질
-3. 보호자와의 인연 및 교감
-4. 건강 및 질병 운
-5. 인생 흐름과 전환점
-6. 종합 결론
+아래 10개 섹션으로 작성하십시오:
+1. 사주 원국 구조 분석
+2. 일간 중심 성향 분석
+3. 오행 균형 및 에너지 흐름
+4. 성격 및 행동 기질
+5. 지능 및 학습 능력
+6. 보호자와의 인연 및 교감
+7. 사회성 및 외부 관계
+8. 건강 및 질병 운
+9. 인생 흐름 및 전환점
+10. 종합 결론
 
 각 섹션은 반드시:
 - 최소 200자 이상
@@ -280,31 +319,47 @@ preview_text는 반드시 새롭게 생성된 요약이어야 합니다.
 - 실제 사주 리포트 수준
 
 건강 섹션에는 반드시 아래 중 최소 1개 포함:
-피부, 관절, 소화기, 호흡기, 스트레스, 면역력
+피부, 관절, 소화기, 면역력, 호흡기
 
 ------------------------------------------------
 [image_prompt 생성 규칙]
 이미지 생성용 프롬프트를 영어로 작성하십시오.
-이미지는 반드시 아래 조건을 충족:
-- 견종: ${input.breed} 강아지가 중심
-- realistic dog matching the breed ${input.breed}
-- dog portrait centered
-- Korean saju report infographic style
-- beige parchment background
-- Korean fortune report design
-- elegant layout
-- high detail
-- premium report look
+
+DOG REQUIREMENT:
+- A realistic ${input.breed} dog
+- exact breed characteristics visible
+- centered portrait
+- full body or upper body visible
+- looking calm and intelligent
+
+STYLE REQUIREMENT:
+- Korean saju fortune report style
+- premium parchment background
+- beige Korean traditional paper texture
+- elegant and minimal layout
+- clean and professional
 - soft lighting
+- studio quality
+- no text
+- no letters
+- no Korean characters
+- no Chinese characters
+
+LAYOUT REQUIREMENT:
+- dog centered
+- subtle decorative Korean traditional pattern
+- premium infographic aesthetic
 - clean background
+- not distorted
+- not abstract
+- not blurry
+
+TECHNICAL REQUIREMENT:
 - square format
-
-이미지에는:
-- subtle Korean fortune report elements
-- parchment paper texture
-- premium aesthetic
-
-텍스트나 한글은 이미지에 포함하지 마십시오.
+- ultra high quality
+- sharp details
+- no glitch
+- no broken layout
 
 ------------------------------------------------
 [입력 데이터]
@@ -323,7 +378,8 @@ preview_text는 반드시 새롭게 생성된 요약이어야 합니다.
   "image_prompt": "..."
 }
 
-다른 설명은 절대 출력하지 마십시오.`;
+절대로 preview_text를 full_text에서 복사하지 마십시오.
+절대로 설명을 추가하지 마십시오.`;
 }
 
 async function generateWithGemini(prompt: string) {
@@ -396,7 +452,11 @@ async function generateReadingContent(input: GenerationInput): Promise<Generatio
 
   const parsed = extractJsonObject(raw) as Partial<GenerationOutput> | null;
   const full_text = normalizeFull(String(parsed?.full_text || raw || ""));
-  const preview_text = normalizePreview(String(parsed?.preview_text || ""), full_text);
+  let preview_text = normalizePreview(String(parsed?.preview_text || ""), input);
+  const previewProbe = preview_text.slice(0, 120).trim();
+  if (previewProbe && full_text.includes(previewProbe)) {
+    preview_text = normalizePreview("", input);
+  }
   const image_prompt = buildImagePrompt(input);
 
   return { preview_text, full_text, image_prompt };
