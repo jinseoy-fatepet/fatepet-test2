@@ -107,6 +107,48 @@ function normalizeFullSections(full: string) {
   return normalized.join("\n\n");
 }
 
+function chunkTextBySize(text: string, chunkSize: number, count: number) {
+  const clean = text.replace(/\s+/g, " ").trim();
+  const chunks: string[] = [];
+  let offset = 0;
+  for (let i = 0; i < count; i += 1) {
+    if (offset >= clean.length) {
+      chunks.push("");
+      continue;
+    }
+    const next = clean.slice(offset, offset + chunkSize);
+    const cutPoint = Math.max(
+      next.lastIndexOf("."),
+      next.lastIndexOf("!"),
+      next.lastIndexOf("?"),
+      next.lastIndexOf("다.")
+    );
+    const piece =
+      cutPoint > chunkSize * 0.65 ? next.slice(0, cutPoint + 1).trim() : next.trim();
+    chunks.push(piece);
+    offset += Math.max(piece.length, Math.floor(chunkSize * 0.8));
+  }
+  return chunks;
+}
+
+function enforceStructuredFull(full: string) {
+  const normalized = normalizeFullSections(full);
+  const blocks = normalized.split(/(?=^\d+\)\s.*$)/m).filter((b) => b.trim().length > 0);
+  if (blocks.length >= 4) return normalized;
+
+  const sections = [
+    "1) Personality",
+    "2) Relationship with owner",
+    "3) 오행·십성 분석",
+    "4) 행동·놀이·색상 가이드",
+  ];
+  const chunks = chunkTextBySize(full, 520, sections.length);
+  const rebuilt = sections
+    .map((title, i) => `${title}\n${trimToSentence(chunks[i] || full, SECTION_TARGET_MAX)}`)
+    .join("\n\n");
+  return rebuilt;
+}
+
 async function generateFullReadingWithGemini(input: {
   name: string;
   birthdate: string;
@@ -584,7 +626,7 @@ export async function POST(req: Request) {
         breed,
       });
     }
-    full = normalizeFullSections(full);
+    full = enforceStructuredFull(full);
     const preview = await generatePreviewSummary({ full, name: petName });
     const supabase = getSupabase();
 
