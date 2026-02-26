@@ -165,7 +165,7 @@ body {
   background: #fffcf6;
   border-radius: 14px;
   padding: 14px;
-  min-height: 132px;
+  min-height: 260px;
   max-height: 260px;
   overflow: auto;
   margin-bottom: 14px;
@@ -241,6 +241,28 @@ body {
   overflow-wrap: anywhere;
   line-height: 1.8;
   font-size: 0.97rem;
+  min-height: 360px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.report-template-panel {
+  position: relative;
+  border: 1px solid #d6c2a5;
+  border-radius: 14px;
+  background: #fffcf6;
+  min-height: 260px;
+  max-height: 260px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.report-template-image {
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  object-position: center;
+  display: block;
 }
 
 .info-chips {

@@ -25,7 +25,9 @@ type ReadingRow = {
 };
 
 const MIN_FULL_LENGTH = 2000;
-const PREVIEW_LENGTH = 300;
+const PREVIEW_LENGTH = 400;
+const SECTION_TARGET_MIN = 450;
+const SECTION_TARGET_MAX = 550;
 
 function requireEnv(name: string) {
   const value = process.env[name];
@@ -56,14 +58,53 @@ function formatPreview(raw: string) {
 
 function ensurePreviewTeaser(preview: string, full: string) {
   let out = formatPreview(preview || "");
-  if (out.length >= 240) return out;
+  if (out.length > PREVIEW_LENGTH) out = out.slice(0, PREVIEW_LENGTH).trim();
+  if (out.length >= 260) return out;
 
   const fallback = formatPreview(full);
-  if (fallback.length >= 240) return fallback;
+  if (fallback.length >= 260) {
+    return fallback.slice(0, PREVIEW_LENGTH).trim();
+  }
 
   let extended = `${out}\n\n${fallback}`.trim();
   if (extended.length > PREVIEW_LENGTH) extended = extended.slice(0, PREVIEW_LENGTH);
   return extended;
+}
+
+function trimToSentence(text: string, maxLength: number) {
+  if (text.length <= maxLength) return text;
+  const cut = text.slice(0, maxLength);
+  const idx = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("!"), cut.lastIndexOf("?"), cut.lastIndexOf("다."));
+  if (idx > maxLength * 0.65) return cut.slice(0, idx + 1).trim();
+  return cut.trim();
+}
+
+function normalizeFullSections(full: string) {
+  const blocks = full
+    .split(/(?=^\d+\)\s.*$)/m)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  if (blocks.length < 2) return full;
+
+  const normalized = blocks.map((block) => {
+    const lines = block.split("\n");
+    const heading = lines[0].trim();
+    let body = lines.slice(1).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    body = body.replace(/[ \t]{2,}/g, " ");
+
+    if (body.length > SECTION_TARGET_MAX) {
+      body = trimToSentence(body, SECTION_TARGET_MAX);
+    }
+    if (body.length < SECTION_TARGET_MIN) {
+      const filler =
+        " 보호자는 일관된 루틴과 다정한 반응을 유지하면 아이의 기운이 안정되고, 관계 만족도와 생활 리듬이 함께 상승합니다.";
+      while (body.length < SECTION_TARGET_MIN) body = `${body}${filler}`;
+      body = trimToSentence(body, SECTION_TARGET_MAX);
+    }
+    return `${heading}\n${body}`;
+  });
+
+  return normalized.join("\n\n");
 }
 
 async function generateFullReadingWithGemini(input: {
@@ -115,6 +156,7 @@ async function generateFullReadingWithGemini(input: {
 - 총 분량 최소 2000자 이상
 - 각 섹션은 구체적이고 감정선이 살아 있어야 한다.
 - 문단을 적절히 나눠 읽기 쉽게 작성한다.
+- 각 섹션 본문은 450~550자 내외로 유지한다.
 `.trim();
 
   const response = await fetch(
@@ -198,6 +240,7 @@ Requirements:
 - At least 2000 Korean characters
 - Emotional, practical, and comforting
 - Split into readable paragraphs
+- Keep each section body around 450~550 Korean characters
 `.trim();
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -249,7 +292,7 @@ async function generatePreviewSummaryWithGemini(args: {
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const prompt = `
 아래 전체 사주 리포트를 결제 유도용 "맛보기 요약"으로 다시 작성해라.
-- 길이: 공백 포함 약 ${PREVIEW_LENGTH}자
+- 길이: 공백 포함 최대 ${PREVIEW_LENGTH}자(절대 초과 금지)
 - 문단 2~4개로 나누기
 - 핵심만 압축하고, 마지막은 "전체 리포트에서 더 깊게 확인 가능" 뉘앙스로 끝내기
 - 감성적이고 따뜻한 톤
@@ -281,7 +324,7 @@ async function generatePreviewSummaryWithOpenAI(args: { full: string; name: stri
   const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
   const prompt = `
 다음 전체 리포트를 결제 유도용 프리뷰로 요약해 주세요.
-- 약 ${PREVIEW_LENGTH}자
+- 최대 ${PREVIEW_LENGTH}자(초과 금지)
 - 2~4문단
 - 감성적, 공감형, 따뜻한 톤
 - 사주 용어 최소 2개 포함(예: 임수, 도화살, 오행, 십성)
@@ -541,6 +584,7 @@ export async function POST(req: Request) {
         breed,
       });
     }
+    full = normalizeFullSections(full);
     const preview = await generatePreviewSummary({ full, name: petName });
     const supabase = getSupabase();
 

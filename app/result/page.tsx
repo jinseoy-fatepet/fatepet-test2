@@ -109,23 +109,10 @@ export default function ResultPage() {
         <div className="report-head">
           <div className="report-avatar-wrap">
             <img
-              src={reading?.image_url || data.image || defaultImage}
+              src={defaultImage}
               alt="반려견"
               className="report-avatar"
-              onLoad={() => setImageLoaded(true)}
-              onError={(e) => {
-                const target = e.currentTarget;
-                if (target.src.endsWith(defaultImage)) return;
-                target.src = defaultImage;
-                setImageLoaded(true);
-              }}
             />
-            {(loading || !imageLoaded) ? (
-              <div className="image-loading-overlay">
-                <Loader2 size={22} className="spin" />
-                <span>사주 도판 생성중...</span>
-              </div>
-            ) : null}
           </div>
           <div>
             <h2>{data.name}</h2>
@@ -139,6 +126,22 @@ export default function ResultPage() {
           <span className="chip">생시 {data.birthtime === "unknown" ? "모름" : (data.birthtime || "-")}</span>
           <span className="chip">성별 {data.gender === "female" ? "여아" : "남아"}</span>
           <span className="chip">견종 {data.breed || "-"}</span>
+        </div>
+
+        <div className="report-template-panel">
+          <img
+            src={reading?.image_url || ""}
+            alt="사주 리포트 템플릿"
+            className="report-template-image"
+            onLoad={() => setImageLoaded(true)}
+            onError={() => setImageLoaded(true)}
+          />
+          {(loading || !imageLoaded) ? (
+            <div className="image-loading-overlay">
+              <Loader2 size={22} className="spin" />
+              <span>사주 도판 생성중...</span>
+            </div>
+          ) : null}
         </div>
 
         <div className="preview-panel">
