@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 
 type ReadingPayload = {
   name?: string;
@@ -39,22 +37,24 @@ type GenerationOutput = {
   image_prompt: string;
 };
 
-const PREVIEW_MIN = 500;
-const PREVIEW_MAX = 600;
-const SECTION_MIN = 200;
+const SECTION_MIN = 180;
 const SECTION_MAX = 300;
 const SECTION_TITLES = [
-  "사주 원국 구조 분석",
-  "일간 중심 성향 분석",
-  "오행 균형 및 에너지 흐름",
-  "성격 및 행동 기질",
-  "지능 및 학습 능력",
-  "보호자와의 인연 및 교감",
-  "사회성 및 외부 관계",
-  "건강 및 질병 운",
-  "인생 흐름 및 전환점",
+  "타고난 본질",
+  "성격 구조",
+  "감정 반응",
+  "보호자와의 인연",
+  "사회성",
+  "삶의 흐름",
+  "강점",
+  "약점",
+  "안정감 형성 요소",
   "종합 결론",
 ] as const;
+
+const SECTION_ENDINGS = ["합니다", "보입니다", "형성됩니다", "작용합니다", "경향이 있습니다", "특성이 나타납니다"] as const;
+const IMAGE_MODELS = ["gpt-image-1", "stable-diffusion-xl"] as const;
+type ImageModel = (typeof IMAGE_MODELS)[number];
 
 const REQUIRED_TERMS = [
   "일간",
@@ -129,73 +129,36 @@ function ensureContainsHealth(text: string) {
   return `${text} 특히 스트레스와 소화기 리듬을 함께 관리하면 전체 균형이 더 안정됩니다.`;
 }
 
-function buildPreviewFallback(input: GenerationInput) {
-  return `${input.pet_name}의 사주 흐름은 일간의 안정성과 오행의 균형을 중심으로 읽히며, ${input.breed} 기질이 더해져 수(水)와 금(金)의 기운이 관계 감수성을 세밀하게 살립니다. 평소 표현에서는 식신과 인성 구조가 부드럽게 작동해 보호자와의 교감 신호를 빠르게 읽고, 도화살 작용은 낯선 환경에서도 호기심을 잃지 않게 돕습니다. 다만 관성 압력이 강해지는 날에는 긴장 반응이 피부와 소화기 컨디션으로 드러날 수 있어 휴식 리듬이 중요합니다. 전 생애 흐름은 초기 적응기, 성숙기, 안정기로 갈수록 기운 정렬이 또렷해지며 보호자의 일관된 루틴이 아이의 균형을 장기적으로 단단하게 만듭니다.`;
+
+function normalizePreview(input: string) {
+  const cleaned = collapseSpace(input || "");
+  if (!cleaned) throw new Error("preview_text is missing from AI generation");
+  return cleaned;
 }
 
-function ensurePreviewCoverage(text: string) {
-  let out = text;
-  if (!out.includes("일간")) out = `${out} 일간의 축이 흔들리지 않아 기본 정서가 안정적입니다.`;
-  if (!out.includes("오행")) out = `${out} 오행의 순환은 환경 적응과 관계 해석의 핵심 기준이 됩니다.`;
-  if (!out.includes("균형")) out = `${out} 생활 리듬의 균형을 지키면 아이의 기운 흐름이 더 부드러워집니다.`;
-  if (!out.includes("보호자")) out = `${out} 보호자와의 상호 반응이 아이의 감정 안정에 직접적 영향을 줍니다.`;
-  if (!out.includes("성격")) out = `${out} 성격의 핵심은 다정함과 관찰력이 공존하는 점입니다.`;
-  if (!out.includes("인생 흐름")) out = `${out} 인생 흐름은 초기 적응기 이후 성숙 구간에서 완성도가 높아집니다.`;
-  return out;
-}
-
-function splitToPreviewParagraphs(text: string) {
-  const sentences = text
-    .split(/(?<=[.!?]|다\.)\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  if (sentences.length <= 2) return sentences.join(" ");
-
-  const groups: string[] = [];
-  for (let i = 0; i < sentences.length; i += 2) {
-    groups.push(sentences.slice(i, i + 2).join(" "));
+function applySectionEnding(text: string, index: number) {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  if (SECTION_ENDINGS.some((ending) => trimmed.endsWith(ending))) {
+    return trimmed;
   }
-  return groups.join("\n\n");
+  const ending = SECTION_ENDINGS[index % SECTION_ENDINGS.length];
+  return `${trimmed} ${ending}`;
 }
 
-function normalizePreview(input: string, context: GenerationInput) {
-  let text = collapseSpace(input || "");
-  if (!text) text = collapseSpace(buildPreviewFallback(context));
-
-  text = ensurePreviewCoverage(text);
-  text = ensureContainsMinTerms(text, 4);
-  text = ensureContainsHealth(text);
-
-  if (text.length > PREVIEW_MAX) text = text.slice(0, PREVIEW_MAX).trim();
-  while (text.length < PREVIEW_MIN) {
-    text = `${text} 보호자와의 교감이 깊어질수록 아이의 오행 균형이 더 따뜻하게 안정되고 인생 흐름도 유연해집니다.`;
-    if (text.length > PREVIEW_MAX) {
-      text = text.slice(0, PREVIEW_MAX).trim();
-      break;
-    }
-  }
-
-  let out = splitToPreviewParagraphs(text);
-  if (out.length > PREVIEW_MAX) out = out.slice(0, PREVIEW_MAX).trim();
-  if (out.length < PREVIEW_MIN) {
-    out = `${out} 오행의 균형을 지켜주는 생활 루틴이 아이의 정서 안정과 건강 관리의 중심축이 됩니다.`;
-    if (out.length > PREVIEW_MAX) out = out.slice(0, PREVIEW_MAX).trim();
-  }
-  return out;
-}
-
-function normalizeSectionBody(body: string, opts?: { health?: boolean }) {
+function normalizeSectionBody(body: string, opts?: { health?: boolean }, index?: number) {
   let out = collapseSpace(body);
   out = ensureContainsMinTerms(out, 2);
   if (opts?.health) out = ensureContainsHealth(out);
   if (out.length > SECTION_MAX) out = out.slice(0, SECTION_MAX).trim();
-  while (out.length < SECTION_MIN) {
-    out = `${out} 일간과 오행의 균형을 기준으로 보호자의 반응 루틴을 일정하게 유지하면 아이의 기운이 안정되고 관계의 구조가 더 단단해집니다.`;
+  if (out.length < SECTION_MIN) {
+    out = `${out} 기운의 흐름을 지키며 감정의 기초를 다져두면 균형이 한층 더 안정됩니다.`;
     if (out.length > SECTION_MAX) {
       out = out.slice(0, SECTION_MAX).trim();
-      break;
     }
+  }
+  if (typeof index === "number") {
+    out = applySectionEnding(out, index);
   }
   return out;
 }
@@ -241,7 +204,7 @@ function normalizeFull(fullText: string) {
 
   const sections = SECTION_TITLES.map((title, idx) => {
     const source = sectionMap.get(title) || rawChunks[idx] || fullText;
-    const body = normalizeSectionBody(source, { health: idx === 7 });
+    const body = normalizeSectionBody(source, { health: idx === 7 }, idx);
     return `${idx + 1}. ${title}\n${body}`;
   });
 
@@ -249,117 +212,61 @@ function normalizeFull(fullText: string) {
 }
 
 function buildImagePrompt(input: GenerationInput) {
-  return `A realistic ${input.breed} dog with exact breed characteristics visible, centered portrait, full body or upper body visible, looking calm and intelligent, Korean saju fortune report style, premium parchment background, beige Korean traditional paper texture, elegant and minimal layout, clean and professional composition, soft lighting, studio quality, subtle decorative Korean traditional pattern, premium infographic aesthetic, clean background, not distorted, not abstract, not blurry, square format, ultra high quality, sharp details, no text, no letters, no Korean characters, no Chinese characters, no glitch, no broken layout`;
+  return `${input.breed}, centered portrait, solo dog, korean saju destiny theme, mystical aura, soft glowing light, elegant composition, ultra detailed, photorealistic, studio lighting, sharp focus, 4k, no text, no watermark, no border`;
 }
 
-function buildMasterPrompt(input: GenerationInput) {
-  return `당신은 반려견 사주명리학 전문가이자, 전문 리포트 생성 시스템입니다.
 
-입력된 반려견 정보를 기반으로 반드시 아래 3가지를 각각 독립적으로 생성하십시오:
-1. preview_text (맛보기 사주)
-2. full_text (전체 사주 풀이)
-3. image_prompt (사주 리포트 이미지 생성용 프롬프트)
+function buildMasterPrompt(input: GenerationInput) {
+  return `당신은 반려견 사주명리학 전문가이며 정교한 리포트를 생성하는 시스템입니다.
+
+입력된 반려견 정보를 바탕으로 꼭 아래 3가지를 각각 독립적으로 생성하십시오:
+1. preview_text (전체 흐름 요약)
+2. full_text (10개 섹션 구조)
+3. image_prompt (사주 리포트 이미지 프롬프트)
 
 ------------------------------------------------
 [절대 규칙]
-preview_text, full_text, image_prompt는 서로 독립적으로 생성하십시오.
-preview_text는 full_text의 첫 문장, 일부, 요약, 발췌를 절대 사용하지 마십시오.
-preview_text는 전체 사주를 다시 분석하여 새롭게 생성한 "전체 요약본"입니다.
-preview_text와 full_text는 서로 완전히 다른 문장으로 작성하십시오.
+preview_text, full_text, image_prompt는 서로 독립적으로 생성해야 합니다.
+preview_text는 full_text 가운데 첫 문단이나 문장을 절대 복사하지 말고, 전체 사주를 다시 분석한 새로운 요약이어야 합니다.
+다른 문장 구조와 어휘를 사용하여 preview_text와 full_text를 완전히 구분하십시오.
+한국어 문법은 자연스럽게, 반복 표현과 번역체를 피하고, "~입니다" 종결만 반복하지 마십시오.
 
 ------------------------------------------------
 [preview_text 생성 규칙]
-목표: 전체 사주에 대한 요약본
-- 500자 이상, 600자 이내
-- 반드시 전체 사주 구조를 요약해야 함
-- full_text의 첫 문단 복사 금지
-- 새로운 문장으로 생성
-
-반드시 포함할 내용:
-- 일간과 오행 균형
-- 성격 핵심
-- 보호자와의 관계
-- 건강 경향
-- 인생 흐름
-
-사주용어 최소 4개 이상 포함:
-일간, 오행, 수(水), 금(金), 목(木), 화(火), 토(土),
-식신, 재성, 관성, 인성, 도화살, 구조, 기운, 균형
-
-톤:
-전문적이고 따뜻한 명리학 리포트 요약
+목표: 전체 사주를 450~600자 내에서 요약한 한 문단
+- 전체 성격, 에너지 흐름, 운세의 변화 축을 꼭 담습니다.
+- full_text의 어떤 문장도 그대로 복사하지 마십시오.
+- 문장 끝 표현을 다양하게 사용하며 "~입니다"만 지속 사용하지 마십시오 (예: "~합니다", "~보입니다", "~경향이 있습니다" 등).
+- 자연스럽고 품질 높은 한국어로 서술하며, 반복된 구조나 동일 어휘를 피하십시오.
+- 일간, 오행, 기운, 균형 등 사주 용어 중 네 가지 이상을 포함하고, 보호자 교감, 건강, 삶의 흐름을 함께 담습니다.
 
 ------------------------------------------------
 [full_text 생성 규칙]
-아래 10개 섹션으로 작성하십시오:
-1. 사주 원국 구조 분석
-2. 일간 중심 성향 분석
-3. 오행 균형 및 에너지 흐름
-4. 성격 및 행동 기질
-5. 지능 및 학습 능력
-6. 보호자와의 인연 및 교감
-7. 사회성 및 외부 관계
-8. 건강 및 질병 운
-9. 인생 흐름 및 전환점
+다음 10개 섹션을 반드시 순서대로 작성하십시오:
+1. 타고난 본질
+2. 성격 구조
+3. 감정 반응
+4. 보호자와의 인연
+5. 사회성
+6. 삶의 흐름
+7. 강점
+8. 약점
+9. 안정감 형성 요소
 10. 종합 결론
 
-각 섹션은 반드시:
-- 최소 200자 이상
-- 최대 300자 이내
-- 반드시 사주 명리학 용어 최소 2개 이상 포함
-
-사용 가능한 사주 용어:
-일간, 오행, 수(水), 금(金), 목(木), 화(火), 토(土),
-식신, 상관, 재성, 편재, 정재, 관성, 편관, 정관,
-인성, 편인, 정인, 도화살, 천을귀인, 구조, 기운, 균형
-
-톤:
-- 전문 명리학 해석 스타일
-- 따뜻하고 보호자 중심적 해석
-- 실제 사주 리포트 수준
-
-건강 섹션에는 반드시 아래 중 최소 1개 포함:
-피부, 관절, 소화기, 면역력, 호흡기
+각 섹션은:
+- 180자 이상 300자 이하
+- 최소 두 개의 사주 용어(예: 일간, 오행, 기운, 균형, 식신, 재성, 관성, 인성, 도화살, 구조)를 포함
+- 문장 끝을 "합니다", "보입니다", "형성됩니다", "작용합니다", "경향이 있습니다", "특성이 나타납니다" 중 하나로 다양하게 마무리하고, 같은 종결을 반복하지 않음
+- 반복 문장 구조를 피하고, "~입니다"만 의존하지 않으며, 표현을 다양화
+- 9번 섹션은 보호자의 루틴과 건강 루틴을 연결해 안정감을 강조
+- 전체적으로 피부, 관절, 소화기, 면역력, 호흡기 중 최소 하나 이상의 건강 주제를 언급합니다.
 
 ------------------------------------------------
 [image_prompt 생성 규칙]
-이미지 생성용 프롬프트를 영어로 작성하십시오.
-
-DOG REQUIREMENT:
-- A realistic ${input.breed} dog
-- exact breed characteristics visible
-- centered portrait
-- full body or upper body visible
-- looking calm and intelligent
-
-STYLE REQUIREMENT:
-- Korean saju fortune report style
-- premium parchment background
-- beige Korean traditional paper texture
-- elegant and minimal layout
-- clean and professional
-- soft lighting
-- studio quality
-- no text
-- no letters
-- no Korean characters
-- no Chinese characters
-
-LAYOUT REQUIREMENT:
-- dog centered
-- subtle decorative Korean traditional pattern
-- premium infographic aesthetic
-- clean background
-- not distorted
-- not abstract
-- not blurry
-
-TECHNICAL REQUIREMENT:
-- square format
-- ultra high quality
-- sharp details
-- no glitch
-- no broken layout
+다음 영어 문자열을 그대로 사용하십시오:
+"${input.breed}, centered portrait, solo dog, korean saju destiny theme, mystical aura, soft glowing light, elegant composition, ultra detailed, photorealistic, studio lighting, sharp focus, 4k, no text, no watermark, no border"
+한 마리의 개만, 중앙에 배치하고 얼굴, 상반신이 선명하게 드러나도록 유지하십시오. 워터마크/텍스트/프레임/기호가 개를 가리지 않아야 합니다.
 
 ------------------------------------------------
 [입력 데이터]
@@ -377,10 +284,9 @@ TECHNICAL REQUIREMENT:
   "full_text": "...",
   "image_prompt": "..."
 }
-
-절대로 preview_text를 full_text에서 복사하지 마십시오.
-절대로 설명을 추가하지 마십시오.`;
+`;
 }
+
 
 async function generateWithGemini(prompt: string) {
   const apiKey = requireEnv("GEMINI_API_KEY");
@@ -451,112 +357,49 @@ async function generateReadingContent(input: GenerationInput): Promise<Generatio
   }
 
   const parsed = extractJsonObject(raw) as Partial<GenerationOutput> | null;
-  const full_text = normalizeFull(String(parsed?.full_text || raw || ""));
-  const previewSource = String(parsed?.preview_text || "").trim() || buildPreviewFallback(input);
-  const preview_text = normalizePreview(previewSource, input);
+  const rawFull = String(parsed?.full_text || raw || "");
+  if (!rawFull.trim()) throw new Error("full_text is missing from AI generation");
+  const full_text = normalizeFull(rawFull);
+  const previewSource = String(parsed?.preview_text || "").trim();
+  if (!previewSource) throw new Error("preview_text is missing from AI generation");
+  const preview_text = normalizePreview(previewSource);
   const image_prompt = buildImagePrompt(input);
 
   return { preview_text, full_text, image_prompt };
 }
 
-async function buildReadingImageSvg(input: {
-  petName: string;
-  birthdate?: string;
-  birthtime?: string;
-  gender?: string;
-  breed?: string;
-}) {
-  const dogPath = path.join(process.cwd(), "public", "default-dog.svg");
-  const dogSvgRaw = await readFile(dogPath, "utf8");
-  const dogSvgBase64 = Buffer.from(dogSvgRaw, "utf8").toString("base64");
-  const seed = `${input.petName}|${input.birthdate || ""}|${input.birthtime || ""}|${input.gender || ""}|${input.breed || ""}`;
-  const tone = seed.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 3;
-  const palettes = [
-    ["#ece0cb", "#cab086", "#7f5f35"],
-    ["#e7ddce", "#bfa785", "#6b5236"],
-    ["#efe5d2", "#c3ab80", "#7d6646"],
-  ] as const;
-  const [paper, line, accent] = palettes[tone];
 
-  return `
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1536" viewBox="0 0 1024 1536">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#241a12"/>
-      <stop offset="100%" stop-color="#3f2c18"/>
-    </linearGradient>
-    <pattern id="hanji" width="24" height="24" patternUnits="userSpaceOnUse">
-      <path d="M0 0h24v24H0z" fill="none"/>
-      <circle cx="2" cy="2" r="1" fill="#ffffff22"/>
-      <circle cx="18" cy="12" r="1" fill="#ffffff18"/>
-      <circle cx="10" cy="20" r="1" fill="#ffffff20"/>
-    </pattern>
-    <radialGradient id="shine" cx="0.5" cy="0.5" r="0.6">
-      <stop offset="0%" stop-color="#fff9ef" stop-opacity="0.95"/>
-      <stop offset="100%" stop-color="#f0dabb" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect width="1024" height="1536" fill="url(#bg)"/>
-  <rect x="34" y="34" width="956" height="1468" rx="30" fill="#11111166" stroke="${line}" stroke-width="5"/>
-  <rect x="54" y="54" width="916" height="1428" rx="24" fill="${paper}" stroke="${line}" stroke-width="3"/>
-  <rect x="54" y="54" width="916" height="1428" rx="24" fill="url(#hanji)"/>
+async function generateDogImageBuffer(prompt: string) {
+  const apiKey = requireEnv("OPENAI_API_KEY");
+  const model = getImageModel();
+  const response = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      prompt,
+      size: "1024x1024",
+      response_format: "b64_json",
+    }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error?.message || "Image generation failed");
+  }
+  const b64 = data?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("Image generation result missing payload");
+  return Buffer.from(b64, "base64");
+}
 
-  <rect x="88" y="104" width="536" height="520" rx="22" fill="#f9f2e4" stroke="${line}" stroke-width="3"/>
-  <rect x="114" y="142" width="486" height="130" rx="16" fill="#fffaf1" stroke="${line}" stroke-width="2"/>
-  <rect x="114" y="292" width="486" height="304" rx="16" fill="#fffdf8" stroke="${line}" stroke-width="2"/>
-  <line x1="114" y1="392" x2="600" y2="392" stroke="#b5966d" stroke-width="1.5"/>
-  <line x1="114" y1="492" x2="600" y2="492" stroke="#b5966d" stroke-width="1.5"/>
-  <line x1="236" y1="292" x2="236" y2="596" stroke="#b5966d" stroke-width="1.5"/>
-  <line x1="358" y1="292" x2="358" y2="596" stroke="#b5966d" stroke-width="1.5"/>
-  <line x1="480" y1="292" x2="480" y2="596" stroke="#b5966d" stroke-width="1.5"/>
-
-  <circle cx="760" cy="320" r="194" fill="#efe3cd" stroke="${accent}" stroke-width="6"/>
-  <circle cx="760" cy="320" r="136" fill="#fff5e4" stroke="${line}" stroke-width="5"/>
-  <image href="data:image/svg+xml;base64,${dogSvgBase64}" x="624" y="184" width="272" height="272"/>
-  <circle cx="760" cy="320" r="184" fill="url(#shine)"/>
-
-  <g transform="translate(654 548)">
-    <rect x="0" y="0" width="212" height="84" rx="14" fill="#fdf8ef" stroke="${line}" stroke-width="2"/>
-    <circle cx="34" cy="42" r="14" fill="#79a9d8"/>
-    <circle cx="74" cy="42" r="14" fill="#89b07a"/>
-    <circle cx="114" cy="42" r="14" fill="#e09d54"/>
-    <circle cx="154" cy="42" r="14" fill="#a98f72"/>
-    <circle cx="194" cy="42" r="10" fill="#c25e5e"/>
-  </g>
-
-  <g transform="translate(88 668)" stroke="${accent}" stroke-width="8" stroke-linecap="round">
-    <line x1="0" y1="0" x2="110" y2="0"/>
-    <line x1="0" y1="28" x2="40" y2="28"/>
-    <line x1="70" y1="28" x2="110" y2="28"/>
-    <line x1="0" y1="56" x2="110" y2="56"/>
-  </g>
-  <g transform="translate(826 668)" stroke="${accent}" stroke-width="8" stroke-linecap="round">
-    <line x1="0" y1="0" x2="110" y2="0"/>
-    <line x1="0" y1="28" x2="40" y2="28"/>
-    <line x1="70" y1="28" x2="110" y2="28"/>
-    <line x1="0" y1="56" x2="110" y2="56"/>
-  </g>
-
-  <rect x="88" y="760" width="848" height="668" rx="24" fill="#fff7eb" stroke="${line}" stroke-width="3"/>
-  <rect x="118" y="806" width="788" height="182" rx="18" fill="#fffdf8" stroke="${line}" stroke-width="2"/>
-  <rect x="118" y="1014" width="788" height="182" rx="18" fill="#fffdf8" stroke="${line}" stroke-width="2"/>
-  <rect x="118" y="1222" width="788" height="162" rx="18" fill="#fffdf8" stroke="${line}" stroke-width="2"/>
-
-  <g transform="translate(146 848)">
-    <circle cx="0" cy="0" r="12" fill="#7aa5cc"/>
-    <circle cx="52" cy="0" r="12" fill="#86b07b"/>
-    <circle cx="104" cy="0" r="12" fill="#d68f52"/>
-    <circle cx="156" cy="0" r="12" fill="#b49776"/>
-    <circle cx="208" cy="0" r="12" fill="#b25454"/>
-  </g>
-  <g transform="translate(146 1060)">
-    <path d="M0 0l14 24h-28z" fill="#8d764f"/>
-    <path d="M56 0l14 24h-28z" fill="#3b8fc0"/>
-    <path d="M112 0l14 24h-28z" fill="#7ea76d"/>
-    <path d="M168 0l14 24h-28z" fill="#c86d48"/>
-    <path d="M224 0l14 24h-28z" fill="#7a60a8"/>
-  </g>
-</svg>`.trim();
+function getImageModel(): ImageModel {
+  const candidate = (process.env.FATEPET_IMAGE_MODEL || "").trim();
+  if (candidate && IMAGE_MODELS.includes(candidate as ImageModel)) {
+    return candidate as ImageModel;
+  }
+  return IMAGE_MODELS[0];
 }
 
 async function uploadReadingImage(args: {
@@ -567,22 +410,15 @@ async function uploadReadingImage(args: {
   birthtime?: string;
   gender?: string;
   breed?: string;
+  image_prompt: string;
 }) {
   const bucket = process.env.SUPABASE_READING_BUCKET || "reading-images";
-  const svg = await buildReadingImageSvg({
-    petName: args.petName,
-    birthdate: args.birthdate,
-    birthtime: args.birthtime,
-    gender: args.gender,
-    breed: args.breed,
-  });
-
-  const filePath = `${args.readingId}/report.svg`;
-  const bytes = Buffer.from(svg, "utf8");
+  const buffer = await generateDogImageBuffer(args.image_prompt);
+  const filePath = `${args.readingId}/report.png`;
 
   const { error: uploadError } = await args.supabase.storage
     .from(bucket)
-    .upload(filePath, bytes, { contentType: "image/svg+xml", upsert: true });
+    .upload(filePath, buffer, { contentType: "image/png", upsert: true });
 
   if (uploadError) throw new Error(`storage upload failed: ${uploadError.message}`);
 
@@ -667,6 +503,7 @@ export async function POST(req: Request) {
       birthtime,
       gender,
       breed,
+      image_prompt: generated.image_prompt,
     });
 
     const { error } = await supabase
