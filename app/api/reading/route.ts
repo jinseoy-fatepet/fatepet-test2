@@ -172,7 +172,18 @@ Requirements:
     throw new Error(data?.error?.message || "OpenAI generation failed");
   }
 
-  const text = (data?.output_text || "").trim();
+  const textFromOutputArray = Array.isArray(data?.output)
+    ? data.output
+        .flatMap((item: any) => (Array.isArray(item?.content) ? item.content : []))
+        .map((part: any) => {
+          if (typeof part?.text === "string") return part.text;
+          if (typeof part?.output_text === "string") return part.output_text;
+          return "";
+        })
+        .join("")
+    : "";
+
+  const text = String(data?.output_text || textFromOutputArray || "").trim();
   if (!text) throw new Error("OpenAI returned empty text");
 
   if (text.length >= MIN_FULL_LENGTH) return text;
