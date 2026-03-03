@@ -136,6 +136,33 @@ function normalizePreview(input: string) {
   return cleaned;
 }
 
+function normalizeForComparison(text: string) {
+  return collapseSpace(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]/g, "");
+}
+
+function commonPrefixLength(a: string, b: string) {
+  const limit = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < limit && a[i] === b[i]) i += 1;
+  return i;
+}
+
+function isPreviewTooSimilarToFull(preview: string, full: string) {
+  const previewNorm = normalizeForComparison(preview);
+  const fullNorm = normalizeForComparison(full);
+  if (!previewNorm || !fullNorm) return false;
+
+  if (fullNorm.startsWith(previewNorm)) return true;
+
+  const window = fullNorm.slice(0, Math.min(fullNorm.length, previewNorm.length + 140));
+  if (window.includes(previewNorm)) return true;
+
+  const prefix = commonPrefixLength(previewNorm, fullNorm);
+  return prefix >= 120 && prefix / Math.max(1, previewNorm.length) >= 0.55;
+}
+
 function applySectionEnding(text: string, index: number) {
   const trimmed = text.trim();
   if (!trimmed) return trimmed;
@@ -213,6 +240,38 @@ function normalizeFull(fullText: string) {
 
 function buildImagePrompt(input: GenerationInput) {
   return `${input.breed}, centered portrait, solo dog, korean saju destiny theme, mystical aura, soft glowing light, elegant composition, ultra detailed, photorealistic, studio lighting, sharp focus, 4k, no text, no watermark, no border`;
+}
+
+function buildLocalDistinctPreview(input: GenerationInput) {
+  return collapseSpace(
+    `${input.pet_name}의 사주 흐름은 일간과 오행의 균형에서 기본 성향이 드러나고, 수(水)·목(木)·화(火)의 순환이 감정 반응과 사회성의 결을 함께 만듭니다. ` +
+      `식신과 인성의 작용이 안정적인 학습 리듬을 돕는 반면 관성의 압력이 높아지는 시기에는 예민함이 잠시 커질 수 있어 보호자 루틴의 일관성이 중요합니다. ` +
+      `재성과 기운의 배치를 보면 관계 운은 천천히 깊어지는 구조이며, 도화살 성분은 낯선 환경에서 관심을 끄는 매력으로 나타날 가능성이 큽니다. ` +
+      `건강 면에서는 소화기와 스트레스 관리가 운의 체감 품질을 좌우하므로 산책-휴식-수면의 박자를 일정하게 맞출수록 전체 균형이 오래 안정됩니다.`
+  );
+}
+
+function buildPreviewRewritePrompt(input: GenerationInput, fullText: string) {
+  return `당신은 반려견 사주 요약 전문가입니다.
+
+아래 전체 리딩(full_text)을 참고하되, 문장을 복사하지 말고 완전히 새 문장으로 preview_text 한 문단만 작성하십시오.
+
+[작성 규칙]
+- 한국어 한 문단, 450~600자
+- full_text의 문장을 그대로 복사 금지
+- 문장 끝 표현 다양화 ("합니다" 반복 금지)
+- 일간, 오행, 기운, 균형, 보호자 교감, 건강, 삶의 흐름을 포함
+- 출력은 텍스트만 (JSON/마크다운 금지)
+
+[입력 정보]
+이름: ${input.pet_name}
+견종: ${input.breed}
+생년월일: ${input.birthdate}
+출생시간: ${input.birthtime}
+성별: ${input.gender}
+
+[full_text]
+${fullText}`;
 }
 
 
@@ -342,6 +401,22 @@ async function generateWithOpenAI(prompt: string) {
   return String(data?.output_text || textFromOutputArray || "").trim();
 }
 
+async function rewritePreviewDistinctly(input: GenerationInput, fullText: string) {
+  const prompt = buildPreviewRewritePrompt(input, fullText);
+  let raw = "";
+  try {
+    raw = await generateWithGemini(prompt);
+  } catch (geminiError: any) {
+    const msg = String(geminiError?.message || "");
+    const quotaLike =
+      msg.includes("Quota exceeded") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("rate-limits");
+    if (!quotaLike && !process.env.OPENAI_API_KEY) throw geminiError;
+    raw = await generateWithOpenAI(prompt);
+  }
+  const parsed = extractJsonObject(raw) as Partial<GenerationOutput> | null;
+  return normalizePreview(String(parsed?.preview_text || raw || ""));
+}
+
 async function generateReadingContent(input: GenerationInput): Promise<GenerationOutput> {
   const prompt = buildMasterPrompt(input);
   let raw = "";
@@ -362,7 +437,19 @@ async function generateReadingContent(input: GenerationInput): Promise<Generatio
   const full_text = normalizeFull(rawFull);
   const previewSource = String(parsed?.preview_text || "").trim();
   if (!previewSource) throw new Error("preview_text is missing from AI generation");
-  const preview_text = normalizePreview(previewSource);
+  let preview_text = normalizePreview(previewSource);
+
+  if (isPreviewTooSimilarToFull(preview_text, full_text)) {
+    try {
+      const rewritten = await rewritePreviewDistinctly(input, full_text);
+      preview_text = isPreviewTooSimilarToFull(rewritten, full_text)
+        ? buildLocalDistinctPreview(input)
+        : rewritten;
+    } catch (_e) {
+      preview_text = buildLocalDistinctPreview(input);
+    }
+  }
+
   const image_prompt = buildImagePrompt(input);
 
   return { preview_text, full_text, image_prompt };
